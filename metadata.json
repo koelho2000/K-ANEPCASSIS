@@ -1,0 +1,5 @@
+{
+  "name": "Assistente SCIE - ANEPC",
+  "description": "Aplicação profissional para arquitetos e engenheiros para cálculo de Categoria de Risco e determinação de medidas de segurança contra incêndio (SCIE) com base na legislação portuguesa (DL 220/2008, Portaria 135/2020).",
+  "requestFramePermissions": []
+}
