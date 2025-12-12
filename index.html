@@ -15,6 +15,7 @@
           extend: {
             fontFamily: {
               sans: ['Inter', 'sans-serif'],
+              serif: ['Georgia', 'serif'],
             },
             colors: {
               anepc: {
@@ -29,12 +30,39 @@
     </script>
     <style>
       body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
-      .print-only { display: none; }
+      
       @media print {
+        @page { margin: 0; size: A4; }
+        body { background-color: white; }
         .no-print { display: none !important; }
         .print-only { display: block !important; }
-        body { background-color: white; }
-        .break-inside-avoid { break-inside: avoid; }
+        
+        /* Force Page Breaks */
+        .page-break { break-before: always; page-break-before: always; }
+        .avoid-break { break-inside: avoid; page-break-inside: avoid; }
+        
+        /* Report container reset */
+        .report-page {
+            width: 210mm;
+            height: 297mm;
+            margin: 0;
+            padding: 20mm; /* Standard print margin */
+            box-shadow: none;
+            border: none;
+            overflow: hidden;
+            background: white;
+        }
+      }
+
+      /* Screen Preview Styles for A4 */
+      .report-page {
+          width: 210mm;
+          min-height: 297mm;
+          margin: 0 auto 2rem auto;
+          background: white;
+          padding: 20mm;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+          position: relative;
       }
     </style>
 <script type="importmap">

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useProject } from '../context/ProjectContext';
-import { MODULES, getTechnicalRequirements } from '../data';
+import { MODULES, getTechnicalRequirements, calculateSpaceEquipment } from '../data';
 import { Space, RiskLocation } from '../types';
 
 // --- TECHNICAL GUIDES CONTENT (Textual Reference) ---
@@ -70,117 +70,6 @@ const TECHNICAL_GUIDES: Record<number, { title: string; content: React.ReactNode
             </div>
         )
     }
-};
-
-// --- CALCULATOR INTERFACE & LOGIC ---
-
-interface EquipmentItem {
-    name: string;
-    quantity: number | string; // number or "N/A"
-    unit: string; // "un", "m²", etc
-    typeClass?: string; // CSS class for badge
-    reason?: string; // Why calculated like this
-}
-
-const calculateSpaceEquipment = (space: Space, moduleId: number): EquipmentItem[] => {
-    const items: EquipmentItem[] = [];
-    const area = space.area || 0;
-    const occ = space.occupancy || 0;
-    
-    // Helper booleans
-    const isKitchen = space.type === 'cozinha';
-    const isTech = ['tecnico', 'bastidor', 'central_termica', 'gerador', 'transformador', 'centro_controlo', 'posto_seguranca', 'lixos'].includes(space.type);
-    const isGarage = space.type === 'garagem';
-    const isPublic = ['restaurante', 'comercio', 'auditorio', 'atrio', 'sala_aula', 'reuniao'].includes(space.type);
-    const isSleep = ['dormitorio', 'enfermaria'].includes(space.type);
-    const highOccupancy = occ > 50;
-
-    switch (moduleId) {
-        case 8: // Meios de Socorro
-            if (isKitchen) {
-                items.push({ name: 'Extintor CO2 2kg', quantity: 1, unit: 'un', typeClass: 'bg-gray-800 text-white', reason: 'Risco Elétrico/Higiene' });
-                items.push({ name: 'Manta Ignífuga', quantity: 1, unit: 'un', typeClass: 'bg-orange-100 text-orange-800', reason: 'Fogo em Roupas/Óleos' });
-                // Optional ABF
-                if (area > 20) items.push({ name: 'Extintor ABF (Espuma)', quantity: 1, unit: 'un', typeClass: 'bg-yellow-100 text-yellow-800', reason: 'Gorduras' });
-            } else if (isTech) {
-                const qtd = Math.max(1, Math.ceil(area / 50)); // Higher density for tech rooms
-                items.push({ name: 'Extintor CO2 5kg', quantity: qtd, unit: 'un', typeClass: 'bg-gray-800 text-white', reason: 'Equipamento Elétrico' });
-            } else if (isGarage) {
-                const qtd = Math.max(1, Math.ceil(area / 150)); // Powder usually covers more
-                items.push({ name: 'Extintor Pó ABC 6kg', quantity: qtd, unit: 'un', typeClass: 'bg-blue-100 text-blue-800', reason: 'Risco B (Combustíveis)' });
-            } else {
-                // General Rule: 1 per 200m2 approx (ensures <15m distance)
-                const qtd = Math.max(1, Math.ceil(area / 200));
-                items.push({ name: 'Extintor Pó ABC 6kg', quantity: qtd, unit: 'un', typeClass: 'bg-blue-100 text-blue-800', reason: 'Regra Geral' });
-            }
-            break;
-
-        case 9: // Portas
-            if (highOccupancy) {
-                items.push({ name: 'Barra Antipânico', quantity: 'Sim', unit: 'req', typeClass: 'bg-red-100 text-red-800', reason: '> 50 Pessoas' });
-                items.push({ name: 'Abertura para Exterior', quantity: 'Sim', unit: 'req', typeClass: 'bg-red-100 text-red-800', reason: 'Sentido de Fuga' });
-            }
-            if (isTech || isKitchen || space.type === 'arquivo' || space.type === 'armazem') {
-                items.push({ name: 'Porta Corta-Fogo (EI)', quantity: 'EI 60 C', unit: 'classe', typeClass: 'bg-orange-100 text-orange-800', reason: 'Isolamento Risco C/F' });
-                items.push({ name: 'Mola Fecho Automático', quantity: 'Sim', unit: 'req', typeClass: 'bg-gray-100 text-gray-800', reason: 'Compartimentação' });
-            } else {
-                 items.push({ name: 'Porta Standard', quantity: '-', unit: '', typeClass: 'text-gray-400', reason: 'Sem req. especial' });
-            }
-            break;
-
-        case 11: // Deteção
-            if (isKitchen || isGarage || space.type === 'central_termica' || space.type === 'gerador') {
-                const qtd = Math.max(1, Math.ceil(area / 30)); // Heat detectors cover less area (~30m2)
-                items.push({ name: 'Detetor Térmico', quantity: qtd, unit: 'un', typeClass: 'bg-orange-100 text-orange-800', reason: 'Evitar Falsos Alarmes' });
-            } else if (space.type === 'atrio' && (space.height || 3) > 6) {
-                items.push({ name: 'Deteção Linear (Feixe)', quantity: 'Estudo', unit: 'proj', typeClass: 'bg-purple-100 text-purple-800', reason: 'Pé-direito elevado' });
-            } else {
-                const qtd = Math.max(1, Math.ceil(area / 60)); // Smoke detectors cover ~60-80m2
-                items.push({ name: 'Detetor Ótico Fumo', quantity: qtd, unit: 'un', typeClass: 'bg-blue-100 text-blue-800', reason: 'Cobertura ~60m²' });
-            }
-            
-            // Manual Call Points (Botoneiras) - Simplified rule: 1 per space if large or risk
-            if (area > 200 || isPublic || highOccupancy) {
-                 items.push({ name: 'Botoneira Alarme', quantity: Math.ceil(area / 500) || 1, unit: 'un', typeClass: 'bg-red-100 text-red-800', reason: 'Junto a saídas' });
-            }
-            
-            // Sounders
-            if (isSleep) {
-                items.push({ name: 'Sinalizador Sonoro Base', quantity: 1, unit: 'un', typeClass: 'bg-yellow-100 text-yellow-800', reason: 'Alarme no quarto' });
-            }
-            break;
-
-        case 12: // Extinção Fixa
-            if (isGarage) {
-                items.push({ name: 'Sprinklers', quantity: 'Obrigatório', unit: 'sis', typeClass: 'bg-blue-600 text-white', reason: 'Estacionamento Coberto' });
-            } else if (space.type === 'palco' && area > 100) {
-                 items.push({ name: 'Sprinklers (Dilúvio)', quantity: 'Sim', unit: 'sis', typeClass: 'bg-blue-600 text-white', reason: 'Palco > 100m²' });
-            } else if (space.type === 'bastidor' || space.type === 'centro_controlo') {
-                 items.push({ name: 'Extinção Gás (FM200)', quantity: 'Rec.', unit: 'sis', typeClass: 'bg-gray-200 text-gray-800', reason: 'Proteger Eletrónica' });
-            } else if (isKitchen) {
-                 items.push({ name: 'Extinção Hotte', quantity: 'Rec.', unit: 'sis', typeClass: 'bg-yellow-100 text-yellow-800', reason: 'Gorduras' });
-            } else {
-                items.push({ name: 'Não Aplicável', quantity: '-', unit: '', typeClass: 'text-gray-400', reason: '' });
-            }
-            break;
-
-        case 13: // Sinalização
-            // Exit Signs
-            items.push({ name: 'Sinal Saída (Fotolum.)', quantity: Math.max(1, Math.ceil(area / 150)), unit: 'un', typeClass: 'bg-green-100 text-green-800', reason: 'Sobre vãos' });
-            
-            // Emergency Lighting
-            if (area > 60 || highOccupancy) {
-                 const qtd = Math.ceil(area / 50); // Rough estimate for anti-panic lighting
-                 items.push({ name: 'Bloco Autónomo (Ambiente)', quantity: qtd, unit: 'un', typeClass: 'bg-yellow-50 text-yellow-800', reason: 'Anti-pânico (>60m²)' });
-            } else {
-                items.push({ name: 'Bloco Autónomo (Sinal)', quantity: 1, unit: 'un', typeClass: 'bg-gray-100 text-gray-800', reason: 'Balizagem porta' });
-            }
-            break;
-            
-        default:
-            break;
-    }
-    return items;
 };
 
 const RegulationViewer: React.FC = () => {

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { BuildingData, ProjectState, RiskCategory, Space, UtilizationType, AppMode, EvacuationPath, WidthCalculation, SmokeCalculation } from '../types';
+import { BuildingData, ProjectState, RiskCategory, Space, UtilizationType, AppMode, EvacuationPath, WidthCalculation, SmokeCalculation, TechnicianData } from '../types';
 import { calculateRiskCategory } from '../data';
 
 interface ProjectContextType {
@@ -14,7 +14,7 @@ interface ProjectContextType {
   addSmokeCalculation: (calc: SmokeCalculation) => void;
   removeSmokeCalculation: (id: string) => void;
   setCurrentModule: (id: number) => void;
-  setProjectDetails: (name: string, location: string, author: string) => void;
+  setProjectDetails: (name: string, location: string, technician: TechnicianData) => void;
   setMode: (mode: AppMode) => void;
   resetProject: () => void;
   loadProject: (state: ProjectState) => void;
@@ -30,10 +30,18 @@ const defaultBuilding: BuildingData = {
   hasBedridden: false
 };
 
+const defaultTechnician: TechnicianData = {
+    name: '',
+    cc: '',
+    association: '',
+    professionalNumber: '',
+    address: ''
+};
+
 const defaultState: ProjectState = {
   projectName: '',
   projectLocation: '',
-  projectAuthor: '',
+  technician: defaultTechnician,
   mode: 'splash',
   building: defaultBuilding,
   category: null,
@@ -156,8 +164,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setState(prev => ({ ...prev, currentModule: id }));
   };
 
-  const setProjectDetails = (name: string, location: string, author: string) => {
-    setState(prev => ({ ...prev, projectName: name, projectLocation: location, projectAuthor: author }));
+  const setProjectDetails = (name: string, location: string, technician: TechnicianData) => {
+    setState(prev => ({ ...prev, projectName: name, projectLocation: location, technician: technician }));
   };
 
   const setMode = (mode: AppMode) => {
@@ -172,10 +180,21 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const loadProject = (newState: ProjectState) => {
-    // Ensure compatibility with older JSONs by merging with default state
+    // Migration logic for older saves where technician might be a string (projectAuthor)
+    let safeTechnician = defaultTechnician;
+    
+    // @ts-ignore - Handle backward compatibility
+    if (typeof newState.projectAuthor === 'string') {
+        // @ts-ignore
+         safeTechnician = { ...defaultTechnician, name: newState.projectAuthor };
+    } else if (newState.technician) {
+         safeTechnician = newState.technician;
+    }
+
     setState({
         ...defaultState,
-        ...newState
+        ...newState,
+        technician: safeTechnician
     });
   };
 

@@ -87,12 +87,29 @@ export interface SmokeCalculation {
     }
 }
 
+export interface EquipmentItem {
+    name: string;
+    quantity: number | string; // number or "N/A"
+    unit: string; // "un", "m²", etc
+    typeClass?: string; // CSS class for badge
+    reason?: string; // Why calculated like this
+}
+
+export interface TechnicianData {
+    name: string;
+    cc: string;
+    association: string; // OE, OA, OET
+    professionalNumber: string;
+    address: string;
+    email?: string;
+}
+
 export type AppMode = 'splash' | 'project_details' | 'modules' | 'report' | 'legislation';
 
 export interface ProjectState {
   projectName: string;
   projectLocation: string;
-  projectAuthor: string; // Added field
+  technician: TechnicianData; // Renamed from projectAuthor and typed
   mode: AppMode;
   building: BuildingData;
   category: RiskCategory | null;
