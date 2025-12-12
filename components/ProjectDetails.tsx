@@ -15,14 +15,15 @@ const ProjectDetails: React.FC = () => {
   const { setProjectDetails, setMode } = useProject();
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
+  const [author, setAuthor] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (name && location) {
-      setProjectDetails(name, location);
+      setProjectDetails(name, location, author);
       setMode('modules'); // Go to main app
     } else {
-        alert("Por favor preencha todos os campos.");
+        alert("Por favor preencha os campos obrigatórios (Nome e Localização).");
     }
   };
 
@@ -42,7 +43,7 @@ const ProjectDetails: React.FC = () => {
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                         <i className="fas fa-folder-open mr-2 text-anepc-blue"></i>
-                        Nome do Projeto
+                        Nome do Projeto *
                         <Tooltip text="Designação oficial do projeto (ex: Edifício Habitacional Lote 4)." />
                     </label>
                     <input 
@@ -58,7 +59,7 @@ const ProjectDetails: React.FC = () => {
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                         <i className="fas fa-map-marker-alt mr-2 text-anepc-blue"></i>
-                        Localização
+                        Localização *
                         <Tooltip text="Localidade ou Concelho. Usado para cabeçalho dos relatórios." />
                     </label>
                     <input 
@@ -68,6 +69,21 @@ const ProjectDetails: React.FC = () => {
                         className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-anepc-blue focus:border-anepc-blue outline-none transition"
                         placeholder="Ex: Lisboa, Portugal"
                         required
+                    />
+                </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <i className="fas fa-user-tie mr-2 text-anepc-blue"></i>
+                        Responsável Técnico / Autor
+                        <Tooltip text="Nome do técnico autor do projeto ou responsável pela verificação SCIE." />
+                    </label>
+                    <input 
+                        type="text" 
+                        value={author}
+                        onChange={(e) => setAuthor(e.target.value)}
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-anepc-blue focus:border-anepc-blue outline-none transition"
+                        placeholder="Ex: Eng.º João Silva"
                     />
                 </div>
 

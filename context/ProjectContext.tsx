@@ -14,7 +14,7 @@ interface ProjectContextType {
   addSmokeCalculation: (calc: SmokeCalculation) => void;
   removeSmokeCalculation: (id: string) => void;
   setCurrentModule: (id: number) => void;
-  setProjectDetails: (name: string, location: string) => void;
+  setProjectDetails: (name: string, location: string, author: string) => void;
   setMode: (mode: AppMode) => void;
   resetProject: () => void;
   loadProject: (state: ProjectState) => void;
@@ -33,6 +33,7 @@ const defaultBuilding: BuildingData = {
 const defaultState: ProjectState = {
   projectName: '',
   projectLocation: '',
+  projectAuthor: '',
   mode: 'splash',
   building: defaultBuilding,
   category: null,
@@ -155,8 +156,8 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setState(prev => ({ ...prev, currentModule: id }));
   };
 
-  const setProjectDetails = (name: string, location: string) => {
-    setState(prev => ({ ...prev, projectName: name, projectLocation: location }));
+  const setProjectDetails = (name: string, location: string, author: string) => {
+    setState(prev => ({ ...prev, projectName: name, projectLocation: location, projectAuthor: author }));
   };
 
   const setMode = (mode: AppMode) => {
@@ -171,7 +172,11 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const loadProject = (newState: ProjectState) => {
-    setState(newState);
+    // Ensure compatibility with older JSONs by merging with default state
+    setState({
+        ...defaultState,
+        ...newState
+    });
   };
 
   return (

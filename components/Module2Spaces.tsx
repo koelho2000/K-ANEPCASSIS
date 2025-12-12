@@ -65,6 +65,7 @@ const Module2Spaces: React.FC = () => {
   const [newName, setNewName] = useState('');
   const [newType, setNewType] = useState('');
   const [newArea, setNewArea] = useState('');
+  const [newHeight, setNewHeight] = useState('');
   const [newOccupancy, setNewOccupancy] = useState('');
   const [isBedridden, setIsBedridden] = useState(false);
   const [isSleeping, setIsSleeping] = useState(false);
@@ -140,6 +141,7 @@ const Module2Spaces: React.FC = () => {
 
     const occ = parseInt(newOccupancy) || 0;
     const area = parseFloat(newArea) || 0;
+    const height = parseFloat(newHeight) || undefined;
     const risk = calculateRisk(occ, isBedridden, isSleeping, isRiskAggravated, newType);
     
     // Determinar notas adicionais automaticamente
@@ -156,6 +158,7 @@ const Module2Spaces: React.FC = () => {
         name: newName,
         type: newType,
         area: area,
+        height: height,
         occupancy: occ,
         riskClass: risk,
         notes: autoNotes.join(', ')
@@ -177,6 +180,7 @@ const Module2Spaces: React.FC = () => {
     setNewName(space.name);
     setNewType(space.type);
     setNewArea(space.area.toString());
+    setNewHeight(space.height ? space.height.toString() : '');
     setNewOccupancy(space.occupancy.toString());
     setIsBedridden(space.riskClass === RiskLocation.D);
     setIsSleeping(space.riskClass === RiskLocation.E);
@@ -193,6 +197,7 @@ const Module2Spaces: React.FC = () => {
     setNewName('');
     setNewType('');
     setNewArea('');
+    setNewHeight('');
     setNewOccupancy('');
     setIsBedridden(false);
     setIsSleeping(false);
@@ -363,7 +368,21 @@ const Module2Spaces: React.FC = () => {
                         min="0"
                     />
                 </div>
-                <div className="md:col-span-3">
+                <div className="md:col-span-1">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Pé-Dt (m)
+                        <Tooltip text="Pé-direito médio. Relevante para Átrios (Deteção)." />
+                    </label>
+                    <input 
+                        type="number" 
+                        value={newHeight}
+                        onChange={e => setNewHeight(e.target.value)}
+                        className="w-full border-gray-300 rounded-md text-sm focus:ring-anepc-blue focus:border-anepc-blue text-gray-900"
+                        placeholder="0"
+                        min="0"
+                    />
+                </div>
+                <div className="md:col-span-2">
                     <label className="block text-xs font-medium text-gray-700 mb-1">
                         Efetivo (pess.)
                         <Tooltip text="Lotação prevista. Pode usar a calculadora automática baseada no Art. 54º." />
@@ -474,7 +493,10 @@ const Module2Spaces: React.FC = () => {
                                 <tr key={space.id} className="hover:bg-gray-50 transition-colors">
                                     <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{space.name}</td>
                                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 capitalize">{space.type.replace(/_/g, ' ')}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-center text-gray-500">{space.area || '-'} m²</td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-center text-gray-500">
+                                        {space.area || '-'} m²
+                                        {space.height ? <span className="text-xs text-gray-400 block">h: {space.height}m</span> : null}
+                                    </td>
                                     <td className="px-4 py-3 whitespace-nowrap text-sm text-center text-gray-500">{space.occupancy}</td>
                                     <td className="px-4 py-3 whitespace-nowrap text-center">
                                         <span className={`px-2 py-1 text-xs leading-5 font-bold rounded-md ${getRiskColor(space.riskClass, space.notes)}`}>

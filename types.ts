@@ -46,6 +46,7 @@ export interface Space {
   name: string;
   type: string;
   area: number;
+  height?: number;
   occupancy: number;
   riskClass: RiskLocation;
   notes?: string;
@@ -91,6 +92,7 @@ export type AppMode = 'splash' | 'project_details' | 'modules' | 'report' | 'leg
 export interface ProjectState {
   projectName: string;
   projectLocation: string;
+  projectAuthor: string; // Added field
   mode: AppMode;
   building: BuildingData;
   category: RiskCategory | null;

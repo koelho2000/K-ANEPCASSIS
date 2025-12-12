@@ -60,9 +60,12 @@ const ReportGenerator: React.FC = () => {
                   <h2 className="text-xl text-anepc-blue font-medium mt-1">Contra Incêndio em Edifícios</h2>
               </div>
               <div className="text-right text-sm text-gray-500">
-                  <p className="font-bold text-gray-800">{state.projectName}</p>
+                  <p className="font-bold text-gray-800 text-base">{state.projectName}</p>
                   <p>{state.projectLocation}</p>
-                  <p className="mt-2">{new Date().toLocaleDateString('pt-PT')}</p>
+                  {state.projectAuthor && (
+                    <p className="mt-1 font-medium text-gray-600"><span className="text-gray-400 font-normal mr-1">Resp:</span>{state.projectAuthor}</p>
+                  )}
+                  <p className="mt-2 text-xs">{new Date().toLocaleDateString('pt-PT')}</p>
               </div>
           </header>
 
