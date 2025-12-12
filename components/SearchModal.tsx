@@ -131,7 +131,7 @@ const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => {
         
         <div className="p-3 bg-gray-100 text-xs text-gray-500 border-t border-gray-200 flex justify-between">
             <span>Selecione para navegar</span>
-            <span>Assistente SCIE</span>
+            <span>K-ANEPCASSIS</span>
         </div>
       </div>
     </div>

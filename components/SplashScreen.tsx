@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { useProject } from '../context/ProjectContext';
 
@@ -17,7 +16,7 @@ const SplashScreen: React.FC = () => {
             <div className="w-24 h-24 bg-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg text-blue-900">
                 <i className="fas fa-shield-alt text-5xl"></i>
             </div>
-            <h1 className="text-4xl font-bold mb-2 tracking-tight">Assistente SCIE</h1>
+            <h1 className="text-4xl font-bold mb-2 tracking-tight">K-ANEPCASSIS</h1>
             <p className="text-blue-100 text-lg">Autoridade Nacional de Emergência e Proteção Civil</p>
         </div>
 
@@ -55,7 +54,7 @@ const SplashScreen: React.FC = () => {
       </div>
       
       <div className="absolute bottom-6 text-blue-300/60 text-xs">
-         © {new Date().getFullYear()} SCIE Assistant. Todos os direitos reservados.
+         © {new Date().getFullYear()} K-ANEPCASSIS. Todos os direitos reservados.
       </div>
     </div>
   );

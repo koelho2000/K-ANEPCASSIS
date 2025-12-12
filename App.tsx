@@ -109,7 +109,7 @@ const AppContent: React.FC = () => {
                 <i className="fas fa-shield-alt text-lg"></i>
              </div>
              <div>
-                 <h1 className="font-bold text-gray-800 leading-tight">Assistente SCIE</h1>
+                 <h1 className="font-bold text-gray-800 leading-tight">K-ANEPCASSIS</h1>
                  <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">ANEPC • v2.1.0</p>
              </div>
          </div>

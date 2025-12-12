@@ -78,7 +78,7 @@ const PageContainer = ({ children, className = "", hideFooter = false }: { child
         {children}
         {!hideFooter && (
             <div className="mt-auto pt-8 border-t border-gray-200 flex justify-between text-[10px] text-gray-400 font-sans">
-                <span>Assistente SCIE - ANEPC</span>
+                <span>K-ANEPCASSIS - ANEPC</span>
                 <span>Relatório Técnico Automático</span>
             </div>
         )}
@@ -481,7 +481,7 @@ const ReportGenerator: React.FC = () => {
                     <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-6">
                         <i className="fas fa-shield-alt text-3xl"></i>
                     </div>
-                    <h2 className="text-2xl font-bold mb-2">Assistente SCIE</h2>
+                    <h2 className="text-2xl font-bold mb-2">K-ANEPCASSIS</h2>
                     <p className="text-blue-200">Segurança Contra Incêndio em Edifícios</p>
                 </div>
                 
