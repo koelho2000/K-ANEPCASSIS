@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useProject } from '../context/ProjectContext';
 import { UT_DEFINITIONS } from '../data';
 import { UtilizationType } from '../types';
@@ -15,7 +15,7 @@ const Tooltip = ({ text }: { text: string }) => (
 
 const Module1Category: React.FC = () => {
   const { state, updateBuildingData } = useProject();
-  const { building, category } = state;
+  const { building, category, spaces } = state;
 
   const handleUtChange = (ut: UtilizationType) => {
     updateBuildingData({ ut });
@@ -40,6 +40,30 @@ const Module1Category: React.FC = () => {
         default: return "-";
     }
   };
+
+  // --- Consistency Checks ---
+  const checkConsistency = useMemo(() => {
+      const totalSpaceArea = spaces.reduce((acc, s) => acc + (s.area || 0), 0);
+      const totalSpaceOcc = spaces.reduce((acc, s) => acc + (s.occupancy || 0), 0);
+      
+      const definedArea = building.grossArea || 0;
+      const definedOcc = building.occupancy || 0;
+
+      // Tolerances
+      const areaDiff = Math.abs(definedArea - totalSpaceArea);
+      const occDiff = Math.abs(definedOcc - totalSpaceOcc);
+      const isAreaMismatch = definedArea > 0 && areaDiff > 5; // >5m² diff
+      const isOccMismatch = definedOcc > 0 && occDiff > 2; // >2 people diff
+
+      return {
+          totalSpaceArea,
+          totalSpaceOcc,
+          isAreaMismatch,
+          isOccMismatch,
+          areaDiff,
+          occDiff
+      };
+  }, [spaces, building]);
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -163,45 +187,84 @@ const Module1Category: React.FC = () => {
                 </div>
 
                 {/* Gross Area */}
-                 <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Área Bruta Total (m²)
-                        <Tooltip text="Superfície total do pavimento dos espaços cobertos, delimitada pelas paredes exteriores. Fator crítico para UT II, VIII e XII." />
-                    </label>
+                 <div className={`bg-gray-50 p-4 rounded-lg border ${checkConsistency.isAreaMismatch ? 'border-yellow-300 bg-yellow-50' : 'border-gray-100'}`}>
+                    <div className="flex justify-between">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Área Bruta Total (m²)
+                            <Tooltip text="Superfície total do pavimento dos espaços cobertos, delimitada pelas paredes exteriores. Fator crítico para UT II, VIII e XII." />
+                        </label>
+                        {checkConsistency.isAreaMismatch && (
+                            <span className="text-[10px] text-yellow-700 font-bold flex items-center">
+                                <i className="fas fa-exclamation-triangle mr-1"></i> Discrepância
+                            </span>
+                        )}
+                    </div>
                     <div className="relative">
                         <input 
                             type="number" 
                             min="0"
                             value={building.grossArea || ''}
                             onChange={(e) => updateBuildingData({ grossArea: parseFloat(e.target.value) })}
-                            className="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md focus:ring-anepc-blue focus:border-anepc-blue"
+                            className={`w-full pl-3 pr-10 py-2 border rounded-md focus:ring-anepc-blue focus:border-anepc-blue ${checkConsistency.isAreaMismatch ? 'border-yellow-400 bg-white' : 'border-gray-300'}`}
                             placeholder="0"
                         />
                          <span className="absolute right-3 top-2 text-gray-400 text-sm">m²</span>
                     </div>
+                    {checkConsistency.isAreaMismatch && (
+                        <p className="text-xs text-yellow-700 mt-2">
+                            A soma dos espaços no Módulo 2 é <strong>{checkConsistency.totalSpaceArea.toFixed(1)} m²</strong>.
+                        </p>
+                    )}
                 </div>
 
                 {/* Occupancy */}
-                <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Efetivo Total (pessoas)
-                        <Tooltip text="Número máximo de pessoas admissível no edifício. Base para cálculo de categorias em UT III, IV, V, VI, etc. (Art. 54º)." />
-                    </label>
+                <div className={`bg-gray-50 p-4 rounded-lg border ${checkConsistency.isOccMismatch ? 'border-yellow-300 bg-yellow-50' : 'border-gray-100'}`}>
+                    <div className="flex justify-between">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Efetivo Total (pessoas)
+                            <Tooltip text="Número máximo de pessoas admissível no edifício. Base para cálculo de categorias em UT III, IV, V, VI, etc. (Art. 54º)." />
+                        </label>
+                        {checkConsistency.isOccMismatch && (
+                            <span className="text-[10px] text-yellow-700 font-bold flex items-center">
+                                <i className="fas fa-exclamation-triangle mr-1"></i> Discrepância
+                            </span>
+                        )}
+                    </div>
                     <div className="relative">
                         <input 
                             type="number" 
                             min="0"
                             value={building.occupancy || ''}
                             onChange={(e) => updateBuildingData({ occupancy: parseInt(e.target.value) })}
-                            className="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md focus:ring-anepc-blue focus:border-anepc-blue"
+                            className={`w-full pl-3 pr-10 py-2 border rounded-md focus:ring-anepc-blue focus:border-anepc-blue ${checkConsistency.isOccMismatch ? 'border-yellow-400 bg-white' : 'border-gray-300'}`}
                             placeholder="0"
                         />
                          <span className="absolute right-3 top-2 text-gray-400 text-sm">pax</span>
                     </div>
+                    {checkConsistency.isOccMismatch && (
+                        <p className="text-xs text-yellow-700 mt-2">
+                            O somatório do efetivo no Módulo 2 é <strong>{checkConsistency.totalSpaceOcc} pax</strong>.
+                        </p>
+                    )}
                 </div>
 
             </div>
           </div>
+          
+          {/* Global Consistency Alert */}
+          {(checkConsistency.isAreaMismatch || checkConsistency.isOccMismatch) && (
+              <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex gap-3 items-start animate-fade-in">
+                  <div className="text-yellow-600 mt-0.5"><i className="fas fa-exclamation-circle"></i></div>
+                  <div>
+                      <h4 className="text-sm font-bold text-yellow-800">Validação de Coerência</h4>
+                      <p className="text-xs text-yellow-700 mt-1">
+                          Os totais definidos neste ecrã diferem da soma detalhada dos espaços (Módulo 2). 
+                          Recomenda-se ajustar os valores aqui para corresponder à realidade detalhada dos locais de risco.
+                      </p>
+                  </div>
+              </div>
+          )}
+
         </div>
       </div>
     </div>

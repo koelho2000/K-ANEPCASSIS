@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useProject } from '../context/ProjectContext';
-import { SmokeCalculation } from '../types';
+import { SmokeCalculation, Space } from '../types';
 
 const Tooltip = ({ text }: { text: string }) => (
   <div className="relative group inline-flex ml-2 align-middle z-50">
@@ -13,14 +13,18 @@ const Tooltip = ({ text }: { text: string }) => (
 );
 
 const Module7Smoke: React.FC = () => {
-  const { state, addSmokeCalculation, removeSmokeCalculation } = useProject();
+  const { state, addSmokeCalculation, updateSmokeCalculation, removeSmokeCalculation } = useProject();
   const [activeTab, setActiveTab] = useState<'general' | 'apsad'>('general');
-  const [method, setMethod] = useState<'passive' | 'active'>('active');
   
+  // Editing State
+  const [isEditing, setIsEditing] = useState<string | null>(null);
+
   // Zone Identification
   const [zoneName, setZoneName] = useState('');
+  const [selectedSpaceId, setSelectedSpaceId] = useState('');
 
   // Input states General
+  const [method, setMethod] = useState<'passive' | 'active'>('active');
   const [spaceType, setSpaceType] = useState('generic');
   const [area, setArea] = useState<number | ''>('');
   const [height, setHeight] = useState<number | ''>('');
@@ -33,7 +37,66 @@ const Module7Smoke: React.FC = () => {
   
   // Results General
   const volume = (area && height) ? Number(area) * Number(height) : 0;
+
+  // Filter available spaces
+  const availableSpaces = useMemo(() => {
+      const usedSpaceIds = new Set(state.smokeCalculations.map(c => c.sourceSpaceId).filter(Boolean));
+      return state.spaces.filter(s => 
+          !usedSpaceIds.has(s.id) || s.id === selectedSpaceId // Allow current selection if editing or re-selecting
+      );
+  }, [state.spaces, state.smokeCalculations, selectedSpaceId]);
+
+  // --- Logic: Check for Required Smoke Control ---
+  const spacesRequiringSmokeControl = useMemo(() => {
+      // Get IDs of spaces already calculated using sourceSpaceId
+      const calculatedSpaceIds = state.smokeCalculations
+          .map(c => c.sourceSpaceId)
+          .filter(id => id !== undefined);
+
+      return state.spaces.filter(s => {
+          // Rule of thumb for SCIE smoke control requirement:
+          const isLarge = s.area >= 200;
+          const isSpecialType = ['garagem', 'palco', 'atrio', 'auditorio', 'armazem', 'industria'].includes(s.type);
+          const isRiskC = s.riskClass === 'C' && s.area > 100;
+          const isHighPower = (s.power && s.power > 20) ? true : false;
+          
+          const needsControl = isLarge || isSpecialType || isRiskC || isHighPower;
+          
+          // Check if this specific space ID has already been processed
+          const alreadyDone = calculatedSpaceIds.includes(s.id);
+
+          return needsControl && !alreadyDone;
+      });
+  }, [state.spaces, state.smokeCalculations]);
   
+  const handleImportSpace = (space: Space) => {
+      setSelectedSpaceId(space.id);
+      setZoneName(space.name); // Suggested name
+      setArea(space.area);
+      if (space.height) setHeight(space.height);
+      
+      // Auto-infer type
+      if (['atrio', 'comercio'].includes(space.type)) setSpaceType('atrium');
+      else if (['garagem'].includes(space.type)) setSpaceType('parking');
+      else if (['palco', 'auditorio'].includes(space.type)) setSpaceType('stage');
+      else if (['circulacao', 'escada'].includes(space.type)) setSpaceType('circulation');
+      else setSpaceType('generic');
+
+      // For APSAD
+      setCantonArea(space.area);
+      if (space.height) setCantonHeight(space.height);
+  };
+
+  const handleSpaceSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const sId = e.target.value;
+      if (!sId) {
+          setSelectedSpaceId('');
+          return;
+      }
+      const space = state.spaces.find(s => s.id === sId);
+      if (space) handleImportSpace(space);
+  };
+
   // Calculate Passive (Natural) Requirements General
   const calculatePassive = () => {
     if (!area) return { areaUtil: 0, numExutores: 0 };
@@ -62,23 +125,13 @@ const Module7Smoke: React.FC = () => {
   };
 
   // Calculate APSAD R17
-  // Simplified Coefficient method (Alpha) based on H and Fire Class
   const calculateAPSAD = () => {
       const h = Number(cantonHeight);
       const sCanton = Number(cantonArea);
       
       if (!h || !sCanton) return { alpha: 0, areaGeo: 0, areaUseful: 0 };
 
-      // Coefficients Table (Approximate standard values for demonstration of the logic)
       let alpha = 0;
-
-      // Logic based on typical APSAD alpha tables (simplified for demo)
-      // Low Risk (1): 0.5% to 1.0%
-      // Ordinary Risk (2): 0.8% to 1.5%
-      // High Risk (3): 1.2% to 2.0%
-      // Height factor: Taller buildings generally require less percentage due to smoke reservoir capacity, 
-      // but strictly APSAD tables are complex. Using a linear interpolation for demo.
-      
       if (h <= 3) {
           if (apsadRisk === 1) alpha = 0.5; 
           if (apsadRisk === 2) alpha = 1.0;
@@ -94,11 +147,8 @@ const Module7Smoke: React.FC = () => {
           if (apsadRisk === 3) alpha = 2.0;
       }
 
-      // Percentage to decimal
       const coeff = alpha / 100;
-      
       const areaUseful = sCanton * coeff;
-      // Geometric area is usually Useful / Cv (Aerodynamic coeff, typically 0.6)
       const areaGeo = areaUseful / 0.6; 
 
       return { alpha, areaUseful, areaGeo };
@@ -122,12 +172,18 @@ const Module7Smoke: React.FC = () => {
               return;
           }
           newCalc = {
-              id: Date.now().toString(),
+              id: isEditing || Date.now().toString(),
               name: zoneName,
+              sourceSpaceId: selectedSpaceId || undefined,
               method: 'general',
               area: Number(area),
               height: Number(height),
               notes: method === 'passive' ? `SCIE Geral - Natural (1/${spaceType === 'stage' ? '50' : '200'})` : `SCIE Geral - Mecânica (${renovations} ren/h)`,
+              inputs: { // Store state for editing
+                  spaceType,
+                  smokeMethod: method,
+                  renovations
+              },
               results: {
                   areaUseful: passiveResults.areaUtil,
                   flowM3S: method === 'active' ? activeResults.flowM3S : undefined,
@@ -140,12 +196,16 @@ const Module7Smoke: React.FC = () => {
               return;
           }
           newCalc = {
-              id: Date.now().toString(),
+              id: isEditing || Date.now().toString(),
               name: zoneName,
+              sourceSpaceId: selectedSpaceId || undefined,
               method: 'apsad',
               area: Number(cantonArea),
               height: Number(cantonHeight),
               notes: `APSAD R17 - Classe ${apsadRisk} - Alpha ${apsadResults.alpha.toFixed(2)}%`,
+              inputs: { // Store state for editing
+                  apsadRisk
+              },
               results: {
                   alpha: apsadResults.alpha,
                   areaUseful: apsadResults.areaUseful,
@@ -154,37 +214,150 @@ const Module7Smoke: React.FC = () => {
           };
       }
 
-      addSmokeCalculation(newCalc);
+      if (isEditing) {
+          updateSmokeCalculation(newCalc);
+          setIsEditing(null);
+      } else {
+          addSmokeCalculation(newCalc);
+      }
+      
+      resetForm();
+  };
+
+  const startEdit = (calc: SmokeCalculation) => {
+      setIsEditing(calc.id);
+      setZoneName(calc.name);
+      setSelectedSpaceId(calc.sourceSpaceId || '');
+      setActiveTab(calc.method);
+
+      if (calc.method === 'general') {
+          setArea(calc.area);
+          setHeight(calc.height);
+          // Restore inputs if available
+          if (calc.inputs) {
+              if (calc.inputs.spaceType) setSpaceType(calc.inputs.spaceType);
+              if (calc.inputs.smokeMethod) setMethod(calc.inputs.smokeMethod);
+              if (calc.inputs.renovations) setRenovations(calc.inputs.renovations);
+          } else {
+              // Fallback if editing old legacy record
+              setSpaceType('generic');
+              // Infer method from results
+              setMethod(calc.results.flowM3H ? 'active' : 'passive');
+          }
+      } else {
+          // APSAD
+          setCantonArea(calc.area);
+          setCantonHeight(calc.height);
+          if (calc.inputs && calc.inputs.apsadRisk) {
+              setApsadRisk(calc.inputs.apsadRisk);
+          }
+      }
+      
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const resetForm = () => {
       setZoneName('');
+      setSelectedSpaceId(''); 
+      setArea('');
+      setHeight('');
+      setCantonArea('');
+      setCantonHeight('');
+      setIsEditing(null);
+      setMethod('active');
+      setSpaceType('generic');
   };
 
   return (
     <div className="max-w-4xl mx-auto">
+      
+      {/* Alert Section for Missing Smoke Control */}
+      {!isEditing && spacesRequiringSmokeControl.length > 0 && (
+          <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-6 animate-fade-in">
+              <div className="flex items-center gap-3 mb-3">
+                  <div className="bg-orange-100 text-orange-600 p-2 rounded-full">
+                      <i className="fas fa-exclamation-triangle"></i>
+                  </div>
+                  <div>
+                      <h3 className="text-sm font-bold text-orange-900">Atenção: Espaços que requerem Desenfumagem</h3>
+                      <p className="text-xs text-orange-800">Detetados espaços com área elevada (>200m²), risco agravado ou potência instalada elevada (>20kW) que ainda não foram dimensionados.</p>
+                  </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                  {spacesRequiringSmokeControl.map(s => (
+                      <button 
+                          key={s.id}
+                          onClick={() => handleImportSpace(s)}
+                          className="flex items-center justify-between bg-white border border-orange-200 p-2 rounded hover:bg-orange-100 transition text-left group"
+                      >
+                          <div>
+                              <span className="block text-xs font-bold text-gray-800">{s.name}</span>
+                              <span className="text-[10px] text-gray-500">{s.type} • {s.area}m² {s.power ? `• ${s.power}kW` : ''}</span>
+                          </div>
+                          <i className="fas fa-plus-circle text-orange-400 group-hover:text-orange-600"></i>
+                      </button>
+                  ))}
+              </div>
+          </div>
+      )}
+
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
         <div className="p-6 border-b border-gray-100 bg-gray-50 flex flex-col md:flex-row justify-between items-center gap-4">
            <div>
-               <h2 className="text-xl font-bold text-gray-800">Cálculo de Controlo de Fumo</h2>
+               <h2 className="text-xl font-bold text-gray-800">
+                   {isEditing ? 'Editar Desenfumagem' : 'Cálculo de Controlo de Fumo'}
+               </h2>
                <p className="text-sm text-gray-500 mt-1">Dimensionamento de desenfumagem (SCIE / APSAD R17)</p>
            </div>
            
-           <div className="flex bg-gray-200 p-1 rounded-lg">
-               <button 
-                  onClick={() => setActiveTab('general')}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition ${activeTab === 'general' ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
-               >
-                   Geral (DL 220)
-               </button>
-               <button 
-                  onClick={() => setActiveTab('apsad')}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition ${activeTab === 'apsad' ? 'bg-white shadow text-red-700' : 'text-gray-500 hover:text-gray-700'}`}
-               >
-                   APSAD R17 (Fumo)
-               </button>
+           <div className="flex gap-4 items-center">
+                {isEditing && (
+                   <button onClick={resetForm} className="text-sm text-gray-500 hover:text-red-500 underline">
+                       Cancelar
+                   </button>
+                )}
+               <div className="flex bg-gray-200 p-1 rounded-lg">
+                   <button 
+                      onClick={() => setActiveTab('general')}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition ${activeTab === 'general' ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
+                   >
+                       Geral (DL 220)
+                   </button>
+                   <button 
+                      onClick={() => setActiveTab('apsad')}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition ${activeTab === 'apsad' ? 'bg-white shadow text-red-700' : 'text-gray-500 hover:text-gray-700'}`}
+                   >
+                       APSAD R17
+                   </button>
+               </div>
            </div>
         </div>
 
         {activeTab === 'general' ? (
             <div className="p-6">
+                
+                {/* Space Selection (Import) */}
+                {!isEditing && (
+                    <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-6">
+                        <label className="block text-xs font-bold text-blue-800 mb-1 uppercase">
+                            <i className="fas fa-magic mr-1"></i> Importar de Espaço Existente
+                            <Tooltip text="Preenche automaticamente os campos com base num espaço criado no Módulo 2." />
+                        </label>
+                        <select 
+                            value={selectedSpaceId} 
+                            onChange={handleSpaceSelect}
+                            className="w-full p-2 border border-blue-200 rounded bg-white text-sm focus:ring-anepc-blue"
+                        >
+                            <option value="">
+                                {availableSpaces.length === 0 ? '-- Todos os espaços já importados --' : '-- Selecionar Espaço --'}
+                            </option>
+                            {availableSpaces.map(s => (
+                                <option key={s.id} value={s.id}>{s.name} ({s.type} - {s.area}m²)</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
                 {/* Zone Name Input */}
                 <div className="mb-6">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -339,61 +512,41 @@ const Module7Smoke: React.FC = () => {
                     <div className="mt-6">
                          <button 
                              onClick={handleSave}
-                             className="w-full bg-anepc-blue text-white font-bold py-3 rounded-lg hover:bg-blue-800 transition shadow-sm"
+                             className={`w-full ${isEditing ? 'bg-orange-500 hover:bg-orange-600' : 'bg-anepc-blue hover:bg-blue-800'} text-white font-bold py-3 rounded-lg transition shadow-sm`}
                          >
-                             <i className="fas fa-plus-circle mr-2"></i> Adicionar à Lista
+                             <i className={`fas ${isEditing ? 'fa-save' : 'fa-plus-circle'} mr-2`}></i>
+                             {isEditing ? 'Guardar Alterações' : 'Adicionar à Lista'}
                          </button>
                     </div>
                 </div>
             </div>
         ) : (
             <div className="p-6">
+                 {/* Space Selection (Import) - Also available here */}
+                {!isEditing && (
+                    <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-6">
+                        <label className="block text-xs font-bold text-blue-800 mb-1 uppercase">
+                            <i className="fas fa-magic mr-1"></i> Importar de Espaço Existente
+                            <Tooltip text="Preenche automaticamente os campos com base num espaço criado no Módulo 2." />
+                        </label>
+                        <select 
+                            value={selectedSpaceId} 
+                            onChange={handleSpaceSelect}
+                            className="w-full p-2 border border-blue-200 rounded bg-white text-sm focus:ring-anepc-blue"
+                        >
+                            <option value="">
+                                {availableSpaces.length === 0 ? '-- Todos os espaços já importados --' : '-- Selecionar Espaço --'}
+                            </option>
+                            {availableSpaces.map(s => (
+                                <option key={s.id} value={s.id}>{s.name} ({s.type} - {s.area}m²)</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6">
                     <h3 className="text-red-800 font-bold text-sm uppercase mb-1">Norma APSAD R17 (Desenfumagem Natural)</h3>
                     <p className="text-xs text-red-700">Método para cálculo de Área Útil de Exutores (S<sub>ui</sub>) em função da área do cantão e altura de referência.</p>
-                </div>
-
-                <div className="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200 flex flex-col items-center">
-                    <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 w-full text-left">Croqui de Definições</h4>
-                    {/* SVG Diagram for Canton and Height */}
-                    <svg viewBox="0 0 500 220" className="w-full max-w-lg h-auto" xmlns="http://www.w3.org/2000/svg">
-                        <defs>
-                            <marker id="arrow" markerWidth="10" markerHeight="10" refX="0" refY="3" orient="auto" markerUnits="strokeWidth">
-                            <path d="M0,0 L0,6 L9,3 z" fill="#003366" />
-                            </marker>
-                        </defs>
-                        
-                        {/* Floor */}
-                        <line x1="10" y1="200" x2="490" y2="200" stroke="#333" strokeWidth="3" />
-                        <text x="450" y="215" fontSize="10" fill="#666">Pavimento</text>
-
-                        {/* Roof Structure (Pitched) */}
-                        <path d="M10 100 L250 30 L490 100" fill="none" stroke="#333" strokeWidth="2" />
-                        <text x="250" y="20" fontSize="10" fill="#666" textAnchor="middle">Cobertura</text>
-
-                        {/* Smoke Curtains (Sancas) */}
-                        <line x1="80" y1="80" x2="80" y2="130" stroke="#d32f2f" strokeWidth="3" />
-                        <line x1="420" y1="80" x2="420" y2="130" stroke="#d32f2f" strokeWidth="3" />
-                        <text x="80" y="145" fontSize="10" fill="#d32f2f" textAnchor="middle">Sanca</text>
-                        <text x="420" y="145" fontSize="10" fill="#d32f2f" textAnchor="middle">Sanca</text>
-
-                        {/* Canton Area Indication */}
-                        <path d="M80 130 L420 130" fill="none" stroke="#d32f2f" strokeWidth="1" strokeDasharray="4" />
-                        <rect x="80" y="30" width="340" height="100" fill="#d32f2f" fillOpacity="0.05" />
-                        <text x="250" y="90" fontSize="12" fontWeight="bold" fill="#d32f2f" textAnchor="middle">CANTÃO DE DESENFUMAGEM (S_canton)</text>
-
-                        {/* Height (H) Indication */}
-                        <line x1="250" y1="30" x2="250" y2="200" stroke="#003366" strokeWidth="1" strokeDasharray="4" />
-                        <line x1="250" y1="30" x2="250" y2="200" strokeOpacity="0" markerEnd="url(#arrow)" /> {/* Invisible line just for marker usage if needed */}
-                        
-                        {/* Dimension Line H */}
-                        <line x1="290" y1="65" x2="290" y2="200" stroke="#003366" strokeWidth="2" />
-                        <line x1="285" y1="65" x2="295" y2="65" stroke="#003366" strokeWidth="2" />
-                        <line x1="285" y1="200" x2="295" y2="200" stroke="#003366" strokeWidth="2" />
-                        <text x="300" y="130" fontSize="12" fontWeight="bold" fill="#003366">H (Altura Referência)</text>
-                        <text x="300" y="145" fontSize="10" fill="#003366">Média (Teto-Chão)</text>
-
-                    </svg>
                 </div>
                 
                 {/* Zone Name */}
@@ -518,9 +671,10 @@ const Module7Smoke: React.FC = () => {
                     <div className="mt-6">
                          <button 
                              onClick={handleSave}
-                             className="w-full bg-anepc-blue text-white font-bold py-3 rounded-lg hover:bg-blue-800 transition shadow-sm"
+                             className={`w-full ${isEditing ? 'bg-orange-500 hover:bg-orange-600' : 'bg-anepc-blue hover:bg-blue-800'} text-white font-bold py-3 rounded-lg transition shadow-sm`}
                          >
-                             <i className="fas fa-plus-circle mr-2"></i> Adicionar à Lista
+                             <i className={`fas ${isEditing ? 'fa-save' : 'fa-plus-circle'} mr-2`}></i>
+                             {isEditing ? 'Guardar Alterações' : 'Adicionar à Lista'}
                          </button>
                     </div>
                 </div>
@@ -542,7 +696,7 @@ const Module7Smoke: React.FC = () => {
                              <th className="px-4 py-3 text-right">Área Local</th>
                              <th className="px-4 py-3 text-right">Result.</th>
                              <th className="px-4 py-3">Notas</th>
-                             <th className="px-4 py-3"></th>
+                             <th className="px-4 py-3 text-right">Ações</th>
                          </tr>
                      </thead>
                      <tbody className="divide-y divide-gray-100">
@@ -560,10 +714,18 @@ const Module7Smoke: React.FC = () => {
                                      }
                                  </td>
                                  <td className="px-4 py-3 text-gray-500 text-xs">{calc.notes}</td>
-                                 <td className="px-4 py-3 text-right">
+                                 <td className="px-4 py-3 text-right font-medium">
+                                     <button 
+                                          onClick={() => startEdit(calc)}
+                                          className="text-orange-500 hover:text-orange-700 mr-3 transition-colors"
+                                          title="Editar"
+                                      >
+                                          <i className="fas fa-edit"></i>
+                                      </button>
                                      <button 
                                           onClick={() => removeSmokeCalculation(calc.id)}
                                           className="text-red-400 hover:text-red-600 transition-colors"
+                                          title="Remover"
                                       >
                                           <i className="fas fa-trash"></i>
                                       </button>

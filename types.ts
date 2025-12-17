@@ -50,11 +50,15 @@ export interface Space {
   occupancy: number;
   riskClass: RiskLocation;
   notes?: string;
+  hasSubCompartmentation?: boolean; // Indicates if space is subdivided into fire sectors
+  power?: number; // Total installed power (kW) for kitchens/tech
+  fireLoad?: number; // Fire load density (MJ/m2) for storage
 }
 
 export interface EvacuationPath {
   id: string;
   name: string;
+  sourceSpaceId?: string; // Link to source space
   type: string; // 'local', 'interior', 'exterior'
   config: string; // 'impasse', 'distinct'
   distance: number;
@@ -65,6 +69,7 @@ export interface EvacuationPath {
 export interface WidthCalculation {
   id: string;
   name: string; // e.g. "Total Building" or "Meeting Room"
+  sourceSpaceId?: string; // Link to source space
   occupancy: number;
   up: number;
   width: number;
@@ -74,10 +79,17 @@ export interface WidthCalculation {
 export interface SmokeCalculation {
     id: string;
     name: string;
+    sourceSpaceId?: string; // Links calculation to a specific space ID to prevent duplicate suggestions
     method: 'general' | 'apsad';
     area: number;
     height: number;
     notes: string;
+    inputs?: { // Store form state for editing restoration
+        spaceType?: string;
+        smokeMethod?: 'passive' | 'active';
+        renovations?: number;
+        apsadRisk?: number;
+    };
     results: {
         alpha?: number; // Only for APSAD
         areaUseful: number;

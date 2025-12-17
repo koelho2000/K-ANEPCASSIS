@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useProject } from '../context/ProjectContext';
 import { EvacuationPath, RiskLocation } from '../types';
 
@@ -13,7 +13,7 @@ const Tooltip = ({ text }: { text: string }) => (
 );
 
 const Module3Distances: React.FC = () => {
-  const { state, addEvacuationPath, removeEvacuationPath } = useProject();
+  const { state, addEvacuationPath, updateEvacuationPath, removeEvacuationPath } = useProject();
   
   // Input states
   const [selectedSpaceId, setSelectedSpaceId] = useState('');
@@ -23,9 +23,20 @@ const Module3Distances: React.FC = () => {
   const [actualDistance, setActualDistance] = useState<number | ''>('');
   const [isRiskD, setIsRiskD] = useState(false);
 
+  // Editing state
+  const [isEditing, setIsEditing] = useState<string | null>(null);
+
   // Manual Override states
   const [manualOverride, setManualOverride] = useState(false);
   const [manualIsCompliant, setManualIsCompliant] = useState(true);
+
+  // Filter available spaces
+  const availableSpaces = useMemo(() => {
+      const usedSpaceIds = new Set(state.evacuationPaths.map(p => p.sourceSpaceId).filter(Boolean));
+      return state.spaces.filter(s => 
+          !usedSpaceIds.has(s.id) || s.id === selectedSpaceId // Allow current selection if editing or re-selecting
+      );
+  }, [state.spaces, state.evacuationPaths, selectedSpaceId]);
 
   // Regulation Logic (Art 57 & 61)
   const calculateMaxDistance = () => {
@@ -79,9 +90,10 @@ const Module3Distances: React.FC = () => {
           return;
       }
 
-      const newPath: EvacuationPath = {
-          id: Date.now().toString(),
+      const pathData: EvacuationPath = {
+          id: isEditing || Date.now().toString(),
           name,
+          sourceSpaceId: selectedSpaceId || undefined,
           type: pathType,
           config,
           distance: Number(actualDistance),
@@ -89,14 +101,53 @@ const Module3Distances: React.FC = () => {
           isCompliant: isCompliant
       };
 
-      addEvacuationPath(newPath);
+      if (isEditing) {
+          updateEvacuationPath(pathData);
+          setIsEditing(null);
+      } else {
+          addEvacuationPath(pathData);
+      }
       
-      // Reset some fields for convenience
+      resetForm();
+  };
+
+  const startEdit = (path: EvacuationPath) => {
+      setIsEditing(path.id);
+      setName(path.name);
+      setPathType(path.type);
+      setConfig(path.config);
+      setActualDistance(path.distance);
+      setSelectedSpaceId(path.sourceSpaceId || '');
+      
+      // Infer Risk D/E based on standard limit diffs (10m limit in impasse interior means Risk D)
+      // This is an approximation since we don't store "isRiskD" boolean in the path object directly
+      const inferredRiskD = (path.type === 'interior' && path.config === 'impasse' && path.maxDistance === 10);
+      setIsRiskD(inferredRiskD);
+
+      // Check if there was a manual override
+      const calculatedComp = path.distance <= path.maxDistance;
+      if (path.isCompliant !== calculatedComp) {
+          setManualOverride(true);
+          setManualIsCompliant(path.isCompliant);
+      } else {
+          setManualOverride(false);
+          setManualIsCompliant(true);
+      }
+      
+      // Scroll to top
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const resetForm = () => {
       setName('');
       setActualDistance('');
       setSelectedSpaceId('');
       setManualOverride(false);
       setManualIsCompliant(true);
+      setIsEditing(null);
+      setPathType('local');
+      setConfig('impasse');
+      setIsRiskD(false);
   };
 
   const getPathTypeLabel = (type: string) => {
@@ -111,30 +162,43 @@ const Module3Distances: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
-        <div className="p-6 border-b border-gray-100 bg-gray-50">
-           <h2 className="text-xl font-bold text-gray-800">Cálculo de Distâncias de Evacuação</h2>
-           <p className="text-sm text-gray-500 mt-1">Verificação regulamentar (Art. 57º e 61º)</p>
+        <div className="p-6 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+           <div>
+               <h2 className="text-xl font-bold text-gray-800">
+                   {isEditing ? 'Editar Percurso de Evacuação' : 'Cálculo de Distâncias de Evacuação'}
+               </h2>
+               <p className="text-sm text-gray-500 mt-1">Verificação regulamentar (Art. 57º e 61º)</p>
+           </div>
+           {isEditing && (
+               <button onClick={resetForm} className="text-sm text-gray-500 hover:text-red-500 underline">
+                   Cancelar Edição
+               </button>
+           )}
         </div>
 
         <div className="p-6 grid md:grid-cols-2 gap-8">
             <div className="space-y-4">
                 {/* Integration with Module 2 */}
-                <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
-                    <label className="block text-xs font-bold text-blue-800 mb-1 uppercase">
-                        <i className="fas fa-magic mr-1"></i> Importar de Espaço Existente
-                        <Tooltip text="Preenche automaticamente os campos com base num espaço criado no Módulo 2." />
-                    </label>
-                    <select 
-                        value={selectedSpaceId} 
-                        onChange={handleSpaceSelect}
-                        className="w-full p-2 border border-blue-200 rounded bg-white text-sm focus:ring-anepc-blue"
-                    >
-                        <option value="">-- Selecionar Espaço --</option>
-                        {state.spaces.map(s => (
-                            <option key={s.id} value={s.id}>{s.name} ({s.type} - Risco {s.riskClass})</option>
-                        ))}
-                    </select>
-                </div>
+                {!isEditing && (
+                    <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                        <label className="block text-xs font-bold text-blue-800 mb-1 uppercase">
+                            <i className="fas fa-magic mr-1"></i> Importar de Espaço Existente
+                            <Tooltip text="Preenche automaticamente os campos com base num espaço criado no Módulo 2." />
+                        </label>
+                        <select 
+                            value={selectedSpaceId} 
+                            onChange={handleSpaceSelect}
+                            className="w-full p-2 border border-blue-200 rounded bg-white text-sm focus:ring-anepc-blue"
+                        >
+                            <option value="">
+                                {availableSpaces.length === 0 ? '-- Todos os espaços já importados --' : '-- Selecionar Espaço --'}
+                            </option>
+                            {availableSpaces.map(s => (
+                                <option key={s.id} value={s.id}>{s.name} ({s.type} - Risco {s.riskClass})</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
 
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -272,9 +336,10 @@ const Module3Distances: React.FC = () => {
                 <button 
                     onClick={handleSavePath}
                     disabled={actualDistance === '' || !name}
-                    className="w-full py-3 bg-anepc-blue text-white rounded-lg font-medium hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                    className={`w-full py-3 ${isEditing ? 'bg-orange-500 hover:bg-orange-600' : 'bg-anepc-blue hover:bg-blue-800'} text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm`}
                 >
-                    <i className="fas fa-plus-circle mr-2"></i> Adicionar ao Projeto
+                    <i className={`fas ${isEditing ? 'fa-save' : 'fa-plus-circle'} mr-2`}></i>
+                    {isEditing ? 'Guardar Alterações' : 'Adicionar ao Projeto'}
                 </button>
             </div>
         </div>
@@ -296,7 +361,7 @@ const Module3Distances: React.FC = () => {
                               <th className="px-4 py-3 text-right">Medido</th>
                               <th className="px-4 py-3 text-right">Máximo</th>
                               <th className="px-4 py-3 text-center">Estado</th>
-                              <th className="px-4 py-3"></th>
+                              <th className="px-4 py-3 text-right">Ações</th>
                           </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
@@ -318,7 +383,14 @@ const Module3Distances: React.FC = () => {
                                           </span>
                                       )}
                                   </td>
-                                  <td className="px-4 py-3 text-right">
+                                  <td className="px-4 py-3 text-right font-medium">
+                                      <button 
+                                          onClick={() => startEdit(path)}
+                                          className="text-orange-500 hover:text-orange-700 mr-3 transition-colors"
+                                          title="Editar"
+                                      >
+                                          <i className="fas fa-edit"></i>
+                                      </button>
                                       <button 
                                           onClick={() => removeEvacuationPath(path.id)}
                                           className="text-red-400 hover:text-red-600 transition-colors"

@@ -4,7 +4,7 @@ import { useProject } from '../context/ProjectContext';
 import { ProjectState } from '../types';
 
 const Sidebar: React.FC = () => {
-  const { state, setCurrentModule, loadProject } = useProject();
+  const { state, setCurrentModule, loadProject, resetProject } = useProject();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const progress = Math.round((state.completedModules.length / MODULES.length) * 100);
@@ -47,6 +47,12 @@ const Sidebar: React.FC = () => {
     reader.readAsText(fileObj);
     // Reset input
     event.target.value = '';
+  };
+
+  const handleNewProject = () => {
+      if (window.confirm("Tem a certeza? Isto irá apagar todos os dados do projeto atual.")) {
+          resetProject();
+      }
   };
 
   return (
@@ -104,7 +110,15 @@ const Sidebar: React.FC = () => {
           <p className="text-[10px] text-gray-500">Cat: <strong>{state.category || '-'}</strong></p>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
+            <button 
+                onClick={handleNewProject}
+                className="flex flex-col items-center justify-center p-2 bg-white border border-gray-200 rounded hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition-all"
+                title="Novo Projeto (Limpar)"
+            >
+                <i className="fas fa-file mb-1 text-gray-400"></i>
+                <span className="text-[10px] font-bold">Novo</span>
+            </button>
             <button 
                 onClick={handleSaveJSON}
                 className="flex flex-col items-center justify-center p-2 bg-white border border-gray-200 rounded hover:bg-blue-50 hover:border-blue-200 hover:text-anepc-blue transition-all"

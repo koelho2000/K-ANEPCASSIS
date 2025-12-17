@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useProject } from '../context/ProjectContext';
 import { RiskLocation, Space } from '../types';
+import { getMaxCompartmentSize } from '../data';
 
 const Tooltip = ({ text }: { text: string }) => (
   <div className="relative group inline-flex ml-2 align-middle z-50">
@@ -67,12 +68,27 @@ const Module2Spaces: React.FC = () => {
   const [newArea, setNewArea] = useState('');
   const [newHeight, setNewHeight] = useState('');
   const [newOccupancy, setNewOccupancy] = useState('');
+  const [newPower, setNewPower] = useState('');
+  const [newFireLoad, setNewFireLoad] = useState('');
+  
   const [isBedridden, setIsBedridden] = useState(false);
   const [isSleeping, setIsSleeping] = useState(false);
   const [isRiskAggravated, setIsRiskAggravated] = useState(false);
+  const [isSubdivided, setIsSubdivided] = useState(false); // New state for compartmentation checkbox
 
   // Calculator State
   const [suggestedOccupancy, setSuggestedOccupancy] = useState<number | null>(null);
+
+  // Determine if Power/FireLoad inputs should be shown
+  const showPowerInput = useMemo(() => {
+      const types = ['cozinha', 'central_termica', 'gerador', 'transformador', 'tecnico', 'oficina'];
+      return types.includes(newType);
+  }, [newType]);
+
+  const showFireLoadInput = useMemo(() => {
+      const types = ['armazem', 'arquivo', 'biblioteca', 'oficina', 'comercio'];
+      return types.includes(newType);
+  }, [newType]);
 
   // Effect to calculate occupancy when Type or Area changes
   useEffect(() => {
@@ -91,6 +107,36 @@ const Module2Spaces: React.FC = () => {
           setSuggestedOccupancy(null);
       }
   }, [newType, newArea]);
+
+  // Logic for Max Compartment Area Check
+  const maxCompArea = useMemo(() => getMaxCompartmentSize(state.category, state.building.ut), [state.category, state.building.ut]);
+  const isAreaExceedingLimit = useMemo(() => {
+      const areaVal = parseFloat(newArea);
+      return !isNaN(areaVal) && areaVal > maxCompArea;
+  }, [newArea, maxCompArea]);
+
+  // --- Smoke Control Requirement Logic (Internal Check) ---
+  const needsSmokeCheck = useMemo(() => {
+      const a = parseFloat(newArea) || 0;
+      const p = parseFloat(newPower) || 0;
+      
+      // 1. General Area Rule
+      if (a >= 200) return true;
+      
+      // 2. Kitchens (Cozinhas)
+      if (newType === 'cozinha' && (p > 20 || a > 50)) return true;
+
+      // 3. Technical Areas (Risco F)
+      if (['transformador', 'gerador', 'central_termica'].includes(newType) && p > 0) return true;
+
+      // 4. Warehouses (Risco C)
+      if (['armazem', 'arquivo'].includes(newType) && a > 100) return true;
+
+      // 5. Special Types
+      if (['palco', 'atrio', 'garagem'].includes(newType)) return true;
+
+      return false;
+  }, [newType, newArea, newPower]);
 
   // Lógica Refatorada de Cálculo de Risco
   const calculateRisk = (occ: number, bed: boolean, sleep: boolean, aggravated: boolean, type: string): RiskLocation => {
@@ -142,8 +188,18 @@ const Module2Spaces: React.FC = () => {
     const occ = parseInt(newOccupancy) || 0;
     const area = parseFloat(newArea) || 0;
     const height = parseFloat(newHeight) || undefined;
+    const power = parseFloat(newPower) || undefined;
+    const fireLoad = parseFloat(newFireLoad) || undefined;
+
     const risk = calculateRisk(occ, isBedridden, isSleeping, isRiskAggravated, newType);
     
+    // Check compartmentation validation if exceeding limit
+    if (area > maxCompArea && !isSubdivided) {
+        if(!confirm(`Atenção: A área deste espaço (${area}m²) excede o máximo permitido de ${maxCompArea}m² para esta categoria. Deseja guardar mesmo assim sem indicar subdivisão?`)) {
+            return;
+        }
+    }
+
     // Determinar notas adicionais automaticamente
     let autoNotes = [];
     if (isBedridden) autoNotes.push('Acamados');
@@ -152,6 +208,9 @@ const Module2Spaces: React.FC = () => {
         if (risk === RiskLocation.F) autoNotes.push('Risco F (Técnico/Controlo)');
         else autoNotes.push('Risco C+ (Agravado)');
     }
+    if (power) autoNotes.push(`Potência: ${power}kW`);
+    if (fireLoad) autoNotes.push(`CI: ${fireLoad}MJ/m²`);
+    if (isSubdivided) autoNotes.push('Subdividido (Setores CF)');
     
     const spaceData: Space = {
         id: isEditing || Date.now().toString(),
@@ -160,8 +219,11 @@ const Module2Spaces: React.FC = () => {
         area: area,
         height: height,
         occupancy: occ,
+        power: power,
+        fireLoad: fireLoad,
         riskClass: risk,
-        notes: autoNotes.join(', ')
+        notes: autoNotes.join(', '),
+        hasSubCompartmentation: isSubdivided
     };
 
     if (isEditing) {
@@ -182,6 +244,9 @@ const Module2Spaces: React.FC = () => {
     setNewArea(space.area.toString());
     setNewHeight(space.height ? space.height.toString() : '');
     setNewOccupancy(space.occupancy.toString());
+    setNewPower(space.power ? space.power.toString() : '');
+    setNewFireLoad(space.fireLoad ? space.fireLoad.toString() : '');
+    
     setIsBedridden(space.riskClass === RiskLocation.D);
     setIsSleeping(space.riskClass === RiskLocation.E);
     // Tenta inferir se era agravado pelas notas ou pela classe F em tipos técnicos
@@ -190,6 +255,7 @@ const Module2Spaces: React.FC = () => {
         (space.notes && space.notes.includes('Agravado')) ||
         false
     );
+    setIsSubdivided(space.hasSubCompartmentation || false);
   };
 
   const resetForm = () => {
@@ -199,9 +265,12 @@ const Module2Spaces: React.FC = () => {
     setNewArea('');
     setNewHeight('');
     setNewOccupancy('');
+    setNewPower('');
+    setNewFireLoad('');
     setIsBedridden(false);
     setIsSleeping(false);
     setIsRiskAggravated(false);
+    setIsSubdivided(false);
     setSuggestedOccupancy(null);
   };
 
@@ -224,6 +293,20 @@ const Module2Spaces: React.FC = () => {
     return state.spaces.reduce((acc, curr) => acc + (curr.area || 0), 0);
   }, [state.spaces]);
 
+  // Consistency Check
+  const consistency = useMemo(() => {
+      const definedArea = state.building.grossArea || 0;
+      const definedOcc = state.building.occupancy || 0;
+      
+      const areaDiff = definedArea - totalArea;
+      const occDiff = definedOcc - totalOccupancy;
+      
+      const isAreaValid = Math.abs(areaDiff) < 5; // 5m2 tolerance
+      const isOccValid = Math.abs(occDiff) < 2; // 2 pax tolerance
+
+      return { definedArea, definedOcc, areaDiff, occDiff, isAreaValid, isOccValid };
+  }, [totalArea, totalOccupancy, state.building]);
+
   const getRiskColor = (risk: RiskLocation, notes?: string) => {
       // Destaque visual para C+ (Agravado)
       if (risk === RiskLocation.C && notes && notes.includes('Agravado')) {
@@ -243,19 +326,24 @@ const Module2Spaces: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto">
-      {/* Dashboard */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      {/* Dashboard - 4 Columns */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center items-center">
-            <span className="text-sm text-gray-500 font-medium uppercase tracking-wider">Espaços</span>
-            <span className="text-3xl font-bold text-gray-800">{state.spaces.length}</span>
-            <span className="text-xs text-gray-400 mt-1">{totalArea.toFixed(1)} m² total</span>
+            <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Nº Espaços</span>
+            <span className="text-2xl font-bold text-gray-800">{state.spaces.length}</span>
         </div>
-        <div className="bg-anepc-light p-4 rounded-xl shadow-sm border border-blue-200 flex flex-col justify-center items-center">
-            <span className="text-sm text-blue-600 font-medium uppercase tracking-wider">Efetivo Total</span>
-            <span className="text-3xl font-bold text-anepc-blue">{totalOccupancy} <span className="text-sm font-normal">pax</span></span>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center items-center relative overflow-hidden">
+            <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Área Total</span>
+            <span className="text-2xl font-bold text-gray-800">{totalArea.toFixed(1)} <span className="text-sm font-normal">m²</span></span>
+            {!consistency.isAreaValid && <div className="absolute top-2 right-2 text-yellow-500"><i className="fas fa-exclamation-triangle"></i></div>}
+        </div>
+        <div className="bg-anepc-light p-4 rounded-xl shadow-sm border border-blue-200 flex flex-col justify-center items-center relative overflow-hidden">
+            <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider mb-1">Efetivo Total</span>
+            <span className="text-2xl font-bold text-anepc-blue">{totalOccupancy} <span className="text-sm font-normal">pax</span></span>
+            {!consistency.isOccValid && <div className="absolute top-2 right-2 text-blue-600"><i className="fas fa-exclamation-triangle"></i></div>}
         </div>
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center items-center">
-            <span className="text-sm text-gray-500 font-medium uppercase tracking-wider">Maior Risco</span>
+            <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Maior Risco</span>
             <span className="text-xl font-bold text-gray-800">
                 {state.spaces.length > 0 
                   ? state.spaces.reduce((prev, current) => (prev > current.riskClass ? prev : current.riskClass), "A") 
@@ -263,6 +351,40 @@ const Module2Spaces: React.FC = () => {
             </span>
         </div>
       </div>
+
+      {/* Consistency Validation Panel */}
+      {(!consistency.isAreaValid || !consistency.isOccValid) && (
+          <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex flex-col md:flex-row gap-4 items-start animate-fade-in">
+              <div className="bg-yellow-100 text-yellow-600 p-2 rounded-full shrink-0 mt-1">
+                  <i className="fas fa-balance-scale"></i>
+              </div>
+              <div className="flex-1">
+                  <h3 className="text-sm font-bold text-yellow-900 mb-1">Validação de Coerência (Módulo 1 vs Módulo 2)</h3>
+                  <div className="grid md:grid-cols-2 gap-4 mt-2">
+                      {!consistency.isAreaValid && (
+                          <div className="bg-white p-2 rounded border border-yellow-200 text-xs">
+                              <span className="block text-gray-500">Área Bruta:</span>
+                              <div className="flex justify-between font-bold">
+                                  <span className="text-gray-800">Definido: {consistency.definedArea} m²</span>
+                                  <span className="text-red-600">Soma: {totalArea.toFixed(1)} m²</span>
+                              </div>
+                              <span className="text-[10px] text-yellow-700 mt-1 block">Diferença: {consistency.areaDiff.toFixed(1)} m²</span>
+                          </div>
+                      )}
+                      {!consistency.isOccValid && (
+                          <div className="bg-white p-2 rounded border border-yellow-200 text-xs">
+                              <span className="block text-gray-500">Efetivo Total:</span>
+                              <div className="flex justify-between font-bold">
+                                  <span className="text-gray-800">Definido: {consistency.definedOcc} pax</span>
+                                  <span className="text-red-600">Soma: {totalOccupancy} pax</span>
+                              </div>
+                              <span className="text-[10px] text-yellow-700 mt-1 block">Diferença: {consistency.occDiff} pax</span>
+                          </div>
+                      )}
+                  </div>
+              </div>
+          </div>
+      )}
 
       {/* Form Card */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
@@ -363,7 +485,7 @@ const Module2Spaces: React.FC = () => {
                         type="number" 
                         value={newArea}
                         onChange={e => setNewArea(e.target.value)}
-                        className="w-full border-gray-300 rounded-md text-sm focus:ring-anepc-blue focus:border-anepc-blue text-gray-900"
+                        className={`w-full border rounded-md text-sm focus:ring-anepc-blue focus:border-anepc-blue text-gray-900 ${isAreaExceedingLimit && !isSubdivided ? 'border-orange-400 bg-orange-50' : 'border-gray-300'}`}
                         placeholder="0"
                         min="0"
                     />
@@ -406,6 +528,50 @@ const Module2Spaces: React.FC = () => {
                 </div>
             </div>
 
+            {/* Extra Fields for Specific Types */}
+            {(showPowerInput || showFireLoadInput) && (
+                <div className="grid md:grid-cols-2 gap-4 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-200 animate-fade-in">
+                    {showPowerInput && (
+                        <div>
+                            <label className="block text-xs font-medium text-slate-700 mb-1">
+                                Potência Total Instalada (kW)
+                                <Tooltip text="Soma da potência dos equipamentos de queima (gás) e elétricos. Se > 20 kW, exige corte geral e exaustão dedicada (que pode implicar desenfumagem)." />
+                            </label>
+                            <div className="relative">
+                                <input 
+                                    type="number" 
+                                    value={newPower}
+                                    onChange={e => setNewPower(e.target.value)}
+                                    className="w-full border-slate-300 rounded-md text-sm focus:ring-anepc-blue focus:border-anepc-blue text-slate-900"
+                                    placeholder="0"
+                                    min="0"
+                                />
+                                <span className="absolute right-3 top-2 text-xs text-slate-500 font-bold">kW</span>
+                            </div>
+                        </div>
+                    )}
+                    {showFireLoadInput && (
+                        <div>
+                            <label className="block text-xs font-medium text-slate-700 mb-1">
+                                Carga de Incêndio (MJ/m²)
+                                <Tooltip text="Densidade de carga de incêndio modificada. Relevante para classificação de risco industrial e armazéns." />
+                            </label>
+                            <div className="relative">
+                                <input 
+                                    type="number" 
+                                    value={newFireLoad}
+                                    onChange={e => setNewFireLoad(e.target.value)}
+                                    className="w-full border-slate-300 rounded-md text-sm focus:ring-anepc-blue focus:border-anepc-blue text-slate-900"
+                                    placeholder="0"
+                                    min="0"
+                                />
+                                <span className="absolute right-3 top-2 text-xs text-slate-500 font-bold">MJ/m²</span>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* Density Calculator Helper */}
             {suggestedOccupancy !== null && newType && (
                  <div className="mb-4 bg-blue-50 border border-blue-100 rounded-lg p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fade-in">
@@ -436,6 +602,55 @@ const Module2Spaces: React.FC = () => {
                      </div>
                  </div>
             )}
+
+            {/* Alerts Section: Compartmentation & Smoke */}
+            <div className="space-y-4 mb-6">
+                
+                {/* Smoke Control Alert */}
+                {needsSmokeCheck && (
+                    <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg flex items-start gap-3 animate-fade-in">
+                        <div className="p-1.5 bg-indigo-100 text-indigo-600 rounded-full shrink-0">
+                            <i className="fas fa-wind"></i>
+                        </div>
+                        <div>
+                            <h4 className="text-sm font-bold text-indigo-900">Requer Controlo de Fumo Provável</h4>
+                            <p className="text-xs text-indigo-800 mt-1">
+                                Devido à área, potência instalada (>20kW) ou tipologia de risco, este espaço enquadra-se nos critérios habituais de exigência de desenfumagem (natural ou mecânica). Verifique o Módulo 7.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                {/* Compartmentation Alert Logic */}
+                {isAreaExceedingLimit && (
+                    <div className={`p-4 rounded-lg border flex flex-col sm:flex-row gap-4 items-start transition-all animate-fade-in ${isSubdivided ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'}`}>
+                        <div className={`p-2 rounded-full shrink-0 ${isSubdivided ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'}`}>
+                            <i className={`fas ${isSubdivided ? 'fa-check-double' : 'fa-exclamation-triangle'}`}></i>
+                        </div>
+                        <div className="flex-1">
+                            <h4 className={`text-sm font-bold ${isSubdivided ? 'text-green-800' : 'text-orange-900'}`}>
+                                {isSubdivided ? 'Subdivisão Confirmada' : 'Atenção: Área Excede Limite de Compartimentação'}
+                            </h4>
+                            <p className={`text-xs mt-1 mb-3 ${isSubdivided ? 'text-green-700' : 'text-orange-800'}`}>
+                                A área deste espaço ({newArea} m²) é superior ao máximo permitido para compartimentos corta-fogo nesta categoria (~{maxCompArea} m²). 
+                                {isSubdivided ? ' A subdivisão interna foi validada.' : ' O espaço deve ser subdividido em setores independentes.'}
+                            </p>
+                            
+                            <label className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 transition shadow-sm w-full sm:w-auto">
+                                <input 
+                                    type="checkbox" 
+                                    checked={isSubdivided} 
+                                    onChange={(e) => setIsSubdivided(e.target.checked)}
+                                    className="w-4 h-4 text-anepc-blue focus:ring-anepc-blue rounded"
+                                />
+                                <span className="text-sm font-medium text-gray-700">
+                                    O espaço possui subdivisão interna em setores corta-fogo
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                )}
+            </div>
 
             <div className="grid md:grid-cols-12 gap-4 items-center">
                 <div className="md:col-span-8 flex flex-wrap gap-4">
@@ -492,17 +707,28 @@ const Module2Spaces: React.FC = () => {
                             {state.spaces.map(space => (
                                 <tr key={space.id} className="hover:bg-gray-50 transition-colors">
                                     <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{space.name}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 capitalize">{space.type.replace(/_/g, ' ')}</td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 capitalize">
+                                        {space.type.replace(/_/g, ' ')}
+                                        {space.power && <span className="block text-[9px] text-blue-500 font-bold">{space.power} kW</span>}
+                                        {space.fireLoad && <span className="block text-[9px] text-orange-500 font-bold">CI: {space.fireLoad}</span>}
+                                    </td>
                                     <td className="px-4 py-3 whitespace-nowrap text-sm text-center text-gray-500">
                                         {space.area || '-'} m²
                                         {space.height ? <span className="text-xs text-gray-400 block">h: {space.height}m</span> : null}
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap text-sm text-center text-gray-500">{space.occupancy}</td>
                                     <td className="px-4 py-3 whitespace-nowrap text-center">
-                                        <span className={`px-2 py-1 text-xs leading-5 font-bold rounded-md ${getRiskColor(space.riskClass, space.notes)}`}>
-                                            {space.riskClass}
-                                            {space.riskClass === 'C' && space.notes && space.notes.includes('Agravado') ? '+' : ''}
-                                        </span>
+                                        <div className="flex flex-col items-center gap-1">
+                                            <span className={`px-2 py-1 text-xs leading-5 font-bold rounded-md ${getRiskColor(space.riskClass, space.notes)}`}>
+                                                {space.riskClass}
+                                                {space.riskClass === 'C' && space.notes && space.notes.includes('Agravado') ? '+' : ''}
+                                            </span>
+                                            {space.hasSubCompartmentation && (
+                                                <span className="text-[10px] bg-green-50 text-green-700 border border-green-200 px-1 rounded flex items-center gap-1" title="Espaço Subdividido">
+                                                    <i className="fas fa-check-double"></i> Setores
+                                                </span>
+                                            )}
+                                        </div>
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
                                         <button 

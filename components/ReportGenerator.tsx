@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { useProject } from '../context/ProjectContext';
 import { MODULES, calculateSpaceEquipment } from '../data';
-import { ProjectState } from '../types';
+import { ProjectState, RiskLocation, Space } from '../types';
 
 // --- Helper: Dynamic Text Generators ("AI") ---
 
@@ -71,9 +71,109 @@ const generateFinalConclusions = (state: ProjectState) => {
     4. Manutenção: ${hasSprinklers ? "O sistema de extinção automática (Sprinklers) e o SADI" : "O SADI e os extintores"} carecem de contrato de manutenção anual com entidade registada na ANEPC.`;
 };
 
+// --- Risk Detail Helper ---
+const getDetailedRiskInfo = (risk: RiskLocation) => {
+    switch (risk) {
+        case RiskLocation.A:
+            return {
+                title: "Risco A - Riscos Normais",
+                description: "Locais de risco reduzido, sem agravamento de carga térmica ou dificuldades especiais de evacuação. Correspondem a habitações, escritórios administrativos padrão e zonas de baixa densidade.",
+                requirements: [
+                    "Reação ao Fogo: Materiais de revestimento classe D-s2,d0 (paredes) e Efl (pavimentos).",
+                    "Compartimentação: Sem requisitos especiais além da estabilidade estrutural geral.",
+                    "Equipamentos: Extintores ABC (1/500m²) e Sinalização Fotoluminescente básica."
+                ],
+                color: "bg-green-600"
+            };
+        case RiskLocation.B:
+            return {
+                title: "Risco B - Acessíveis ao Público",
+                description: "Locais acessíveis ao público com efetivo superior a 100 pessoas ou com características específicas de afluência (restaurantes, salas de conferência, átrios).",
+                requirements: [
+                    "Portas: Devem abrir no sentido da evacuação (para fora).",
+                    "Ferragens: Instalação obrigatória de barras antipânico em saídas com > 50 pessoas.",
+                    "Vias de Evacuação: Largura mínima dimensionada por UP (Unidades de Passagem).",
+                    "Iluminação: Blocos autónomos de emergência e sinalização de saídas bem visível."
+                ],
+                color: "bg-yellow-600"
+            };
+        case RiskLocation.C:
+            return {
+                title: "Risco C - Risco Agravado",
+                description: "Locais que apresentam riscos agravados de eclosão ou desenvolvimento de incêndio devido à carga térmica ou atividade (Cozinhas, Arquivos, Armazéns, Oficinas).",
+                requirements: [
+                    "Compartimentação: Paredes EI 60 a isolar do restante edifício.",
+                    "Vãos: Portas Corta-Fogo EI 30 C ou EI 60 C com mola de fecho automático.",
+                    "Deteção: Recomendada a instalação de deteção automática (térmica ou fumo).",
+                    "Extinção: Extintores adequados ao risco (ex: Manta ignífuga e CO2 em cozinhas)."
+                ],
+                color: "bg-orange-600"
+            };
+        case RiskLocation.D:
+            return {
+                title: "Risco D - Acamados / Mobilidade Reduzida",
+                description: "Locais destinados a pessoas acamadas ou com mobilidade condicionada (Enfermarias, Quartos de Lares, Hospitais).",
+                requirements: [
+                    "Evacuação: Distância máxima em impasse reduzida para 10 metros.",
+                    "Portas: Largura útil mínima reforçada (muitas vezes > 1.10m para macas).",
+                    "Compartimentação: Setorização rigorosa para permitir evacuação horizontal progressiva.",
+                    "Equipamentos: Deteção automática obrigatória."
+                ],
+                color: "bg-red-600"
+            };
+        case RiskLocation.E:
+            return {
+                title: "Risco E - Locais de Dormida",
+                description: "Espaços destinados a dormida onde os ocupantes não estão em vigília (Quartos de Hotéis, Residências).",
+                requirements: [
+                    "Deteção: Obrigatória deteção de incêndio no interior dos quartos/locais.",
+                    "Alarme: Sinalizador sonoro (base do detetor) com nível acústico adequado para despertar.",
+                    "Portas: Portas de acesso aos quartos com resistência ao fogo (EI 30) e mola.",
+                    "Reação ao Fogo: Restrições elevadas a materiais têxteis e mobiliário fixo."
+                ],
+                color: "bg-purple-600"
+            };
+        case RiskLocation.F:
+            return {
+                title: "Risco F - Serviços Técnicos e Controlo",
+                description: "Locais técnicos vitais ou de risco elevado (Quadros Elétricos, Centrais Térmicas, Salas de Bombas, Centros de Controlo).",
+                requirements: [
+                    "Acesso: Reservado a pessoal autorizado. Portas fechadas à chave.",
+                    "Compartimentação: Paredes EI 60/90. Portas EI 30/60 C com fecho automático.",
+                    "Segurança: Corte geral de energia (botoneira de corte) no exterior acessível.",
+                    "Equipamentos: Deteção automática e, em certos casos, extinção automática (gases) para proteger equipamentos críticos."
+                ],
+                color: "bg-gray-800"
+            };
+        default:
+            return { title: "Desconhecido", description: "", requirements: [], color: "bg-gray-400" };
+    }
+};
+
+const needsSmokeControl = (s: Space) => {
+    // Basic logic for smoke control requirement
+    // 1. Area > 200m2
+    // 2. Parking (Garagem)
+    // 3. Stages (Palco)
+    // 4. Atriums (Atrio)
+    // 5. Basements usually require it too, but we check floorsBelow in space properties in a real app.
+    // Assuming 'cave' or 'subsolo' in name or type basement logic would be better but simple types suffice.
+    const isLarge = s.area >= 200;
+    const isSpecialType = ['garagem', 'palco', 'atrio', 'auditorio', 'armazem', 'industria'].includes(s.type);
+    const isRiskC = s.riskClass === 'C' && s.area > 100;
+    
+    return isLarge || isSpecialType || isRiskC;
+};
+
 // --- Components ---
 
-const PageContainer = ({ children, className = "", hideFooter = false }: { children?: React.ReactNode, className?: string, hideFooter?: boolean }) => (
+interface PageContainerProps {
+    children?: React.ReactNode;
+    className?: string;
+    hideFooter?: boolean;
+}
+
+const PageContainer: React.FC<PageContainerProps> = ({ children, className = "", hideFooter = false }) => (
     <div className={`report-page flex flex-col ${className}`}>
         {children}
         {!hideFooter && (
@@ -155,6 +255,22 @@ const ReportGenerator: React.FC = () => {
 
   const today = new Date().toLocaleDateString('pt-PT', { year: 'numeric', month: 'long', day: 'numeric' });
 
+  // Pagination Logic for Chapter II
+  const SPACES_PER_FIRST_PAGE = 15;
+  const SPACES_PER_NEXT_PAGE = 25;
+  
+  const spacesPage1 = state.spaces.slice(0, SPACES_PER_FIRST_PAGE);
+  const remainingSpaces = state.spaces.slice(SPACES_PER_FIRST_PAGE);
+  
+  const spaceChunks = [];
+  for (let i = 0; i < remainingSpaces.length; i += SPACES_PER_NEXT_PAGE) {
+      spaceChunks.push(remainingSpaces.slice(i, i + SPACES_PER_NEXT_PAGE));
+  }
+
+  // Chapter II: Risk Summary Logic
+  // Explicitly casting as RiskLocation[] to ensure correct type inference
+  const uniqueRisks = Array.from(new Set(state.spaces.map(s => s.riskClass))).sort() as RiskLocation[];
+
   return (
     <div className="bg-gray-100 min-h-screen pb-20 font-serif">
       
@@ -231,8 +347,12 @@ const ReportGenerator: React.FC = () => {
                       <span>7</span>
                   </li>
                   <li className="flex justify-between items-baseline border-b border-gray-100 pb-1 border-dashed">
-                      <span className="font-bold">Capítulo V - Instalações Técnicas</span>
+                      <span className="font-bold">Capítulo V - Instalações Técnicas (5.1 a 5.2)</span>
                       <span>8</span>
+                  </li>
+                  <li className="flex justify-between items-baseline border-b border-gray-100 pb-1 border-dashed">
+                      <span className="font-bold">Capítulo V - Instalações Técnicas (5.3 a 5.4)</span>
+                      <span>9</span>
                   </li>
                   <li className="flex justify-between items-baseline border-b border-gray-100 pb-1 border-dashed">
                       <span className="font-bold">Capítulo VI - Considerações Finais</span>
@@ -291,7 +411,7 @@ const ReportGenerator: React.FC = () => {
                 <AnalysisBox text={generateLegalAnalysis(state)} />
           </PageContainer>
 
-          {/* --- CAPÍTULO II --- */}
+          {/* --- CAPÍTULO II (PÁGINA 1) --- */}
           <PageContainer className="page-break">
                 <h3 className="text-xl font-bold text-gray-800 mb-4 uppercase tracking-wide border-b border-anepc-blue pb-1">Capítulo II - Caracterização</h3>
                 <div className="text-justify text-sm text-gray-700 mb-6 leading-relaxed">
@@ -300,30 +420,143 @@ const ReportGenerator: React.FC = () => {
                     <h4 className="font-bold text-gray-900 mb-2">Classificação dos Locais de Risco</h4>
                     <p className="mb-2">Com base na análise funcional, foram identificados os seguintes espaços e respetivas classes de risco:</p>
                     
-                    <table className="w-full text-sm border-collapse border border-gray-300 mb-4 font-sans">
+                    <table className="w-full text-xs border-collapse border border-gray-300 mb-4 font-sans">
                         <thead className="bg-gray-100">
                             <tr>
-                                <th className="border p-2 text-left">Espaço</th>
-                                <th className="border p-2 text-left">Tipologia</th>
-                                <th className="border p-2 text-center">Risco</th>
+                                <th className="border p-1 text-left">Espaço</th>
+                                <th className="border p-1 text-left">Tipo</th>
+                                <th className="border p-1 text-center">Área</th>
+                                <th className="border p-1 text-center">Vol.</th>
+                                <th className="border p-1 text-center">Ef.</th>
+                                <th className="border p-1 text-center">Dens.</th>
+                                <th className="border p-1 text-center">Risco</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {state.spaces.length > 0 ? state.spaces.slice(0, 15).map(s => (
-                                <tr key={s.id}>
-                                    <td className="border p-1 pl-2">{s.name}</td>
-                                    <td className="border p-1 text-gray-600 capitalize">{s.type.replace(/_/g, ' ')}</td>
-                                    <td className="border p-1 text-center font-bold">{s.riskClass}</td>
-                                </tr>
-                            )) : (
-                                <tr><td colSpan={3} className="border p-2 text-center italic text-gray-500">Sem espaços definidos</td></tr>
+                            {spacesPage1.length > 0 ? spacesPage1.map(s => {
+                                const volume = s.height ? (s.area * s.height).toFixed(0) : '-';
+                                const density = s.occupancy > 0 ? (s.area / s.occupancy).toFixed(1) : '-';
+                                return (
+                                    <tr key={s.id}>
+                                        <td className="border p-1 pl-2 font-medium">{s.name}</td>
+                                        <td className="border p-1 text-gray-600 capitalize truncate max-w-[100px]">{s.type.replace(/_/g, ' ')}</td>
+                                        <td className="border p-1 text-center">{s.area} m²</td>
+                                        <td className="border p-1 text-center">{volume !== '-' ? `${volume} m³` : '-'}</td>
+                                        <td className="border p-1 text-center font-bold">{s.occupancy}</td>
+                                        <td className="border p-1 text-center text-gray-500">{density !== '-' ? `${density} m²/p` : '-'}</td>
+                                        <td className="border p-1 text-center font-bold">{s.riskClass}</td>
+                                    </tr>
+                                )
+                            }) : (
+                                <tr><td colSpan={7} className="border p-2 text-center italic text-gray-500">Sem espaços definidos</td></tr>
                             )}
                         </tbody>
                     </table>
-                     {state.spaces.length > 15 && <p className="text-xs text-gray-500 italic">(Lista truncada. Consultar peças desenhadas.)</p>}
                 </div>
+          </PageContainer>
 
-                <AnalysisBox text={generateBuildingAnalysis(state)} />
+          {/* --- CAPÍTULO II (PÁGINAS ADICIONAIS) --- */}
+          {spaceChunks.map((chunk, index) => (
+              <PageContainer key={`cap2-page-${index}`} className="page-break">
+                    <h3 className="text-xl font-bold text-gray-800 mb-4 uppercase tracking-wide border-b border-anepc-blue pb-1">Capítulo II - Caracterização (Cont.)</h3>
+                    <div className="text-justify text-sm text-gray-700 mb-6 leading-relaxed">
+                        <h4 className="font-bold text-gray-900 mb-2">Classificação dos Locais de Risco (Continuação)</h4>
+                        
+                        <table className="w-full text-xs border-collapse border border-gray-300 mb-4 font-sans">
+                            <thead className="bg-gray-100">
+                                <tr>
+                                    <th className="border p-1 text-left">Espaço</th>
+                                    <th className="border p-1 text-left">Tipo</th>
+                                    <th className="border p-1 text-center">Área</th>
+                                    <th className="border p-1 text-center">Vol.</th>
+                                    <th className="border p-1 text-center">Ef.</th>
+                                    <th className="border p-1 text-center">Dens.</th>
+                                    <th className="border p-1 text-center">Risco</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {chunk.map(s => {
+                                    const volume = s.height ? (s.area * s.height).toFixed(0) : '-';
+                                    const density = s.occupancy > 0 ? (s.area / s.occupancy).toFixed(1) : '-';
+                                    return (
+                                        <tr key={s.id}>
+                                            <td className="border p-1 pl-2 font-medium">{s.name}</td>
+                                            <td className="border p-1 text-gray-600 capitalize truncate max-w-[100px]">{s.type.replace(/_/g, ' ')}</td>
+                                            <td className="border p-1 text-center">{s.area} m²</td>
+                                            <td className="border p-1 text-center">{volume !== '-' ? `${volume} m³` : '-'}</td>
+                                            <td className="border p-1 text-center font-bold">{s.occupancy}</td>
+                                            <td className="border p-1 text-center text-gray-500">{density !== '-' ? `${density} m²/p` : '-'}</td>
+                                            <td className="border p-1 text-center font-bold">{s.riskClass}</td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+              </PageContainer>
+          ))}
+
+          {/* --- CAPÍTULO II (PÁGINA FINAL): RESUMO DE RISCOS --- */}
+          <PageContainer className="page-break">
+               <h3 className="text-xl font-bold text-gray-800 mb-6 uppercase tracking-wide border-b border-anepc-blue pb-1">Capítulo II - Análise de Riscos Específicos</h3>
+               <div className="text-justify text-sm text-gray-700 mb-6 leading-relaxed">
+                   <p>Abaixo apresenta-se o detalhe dos requisitos técnicos e medidas de segurança exigidas para cada classe de risco identificada no edifício, conforme estipulado no RJ-SCIE e RT-SCIE.</p>
+               </div>
+
+               <div className="space-y-6">
+                   {uniqueRisks.length > 0 ? uniqueRisks.map(risk => {
+                       const info = getDetailedRiskInfo(risk);
+                       const spacesOfThisRisk = state.spaces.filter(s => s.riskClass === risk);
+                       const smokeSpaces = spacesOfThisRisk.filter(s => needsSmokeControl(s));
+
+                       return (
+                           <div key={risk} className="border border-gray-200 rounded-lg overflow-hidden break-inside-avoid shadow-sm">
+                               <div className={`${info.color} text-white p-3 flex justify-between items-center`}>
+                                   <h4 className="font-bold text-sm uppercase">{info.title}</h4>
+                                   <span className="text-xs bg-white/20 px-2 py-0.5 rounded">RT-SCIE</span>
+                               </div>
+                               <div className="p-4 bg-white">
+                                   <p className="text-sm text-gray-700 mb-4 italic">{info.description}</p>
+                                   
+                                   <div className="bg-gray-50 p-3 rounded border border-gray-100">
+                                       <h5 className="text-xs font-bold text-gray-500 uppercase mb-2 border-b border-gray-200 pb-1">Sistemas e Requisitos Exigidos</h5>
+                                       <ul className="space-y-2">
+                                           {info.requirements.map((req, i) => (
+                                               <li key={i} className="flex items-start text-xs text-gray-800">
+                                                   <i className={`fas fa-check-circle mt-0.5 mr-2 ${info.color.replace('bg-', 'text-')}`}></i>
+                                                   <span>{req}</span>
+                                               </li>
+                                           ))}
+                                       </ul>
+                                   </div>
+
+                                   {/* Smoke Control Requirements Sub-section */}
+                                   {smokeSpaces.length > 0 && (
+                                       <div className="mt-4 bg-orange-50 p-3 rounded border border-orange-100">
+                                           <h5 className="text-xs font-bold text-orange-800 uppercase mb-2 flex items-center gap-2">
+                                               <i className="fas fa-wind"></i> Necessidade de Desenfumagem
+                                           </h5>
+                                           <p className="text-xs text-orange-700 mb-2">Os seguintes locais desta classe de risco requerem instalação de controlo de fumo devido à área ou tipologia:</p>
+                                           <div className="flex flex-wrap gap-2">
+                                               {smokeSpaces.map(s => (
+                                                   <span key={s.id} className="text-[10px] font-bold bg-white border border-orange-200 text-gray-700 px-2 py-1 rounded">
+                                                       {s.name} ({s.area}m²)
+                                                   </span>
+                                               ))}
+                                           </div>
+                                       </div>
+                                   )}
+                               </div>
+                           </div>
+                       );
+                   }) : (
+                       <div className="text-center text-gray-400 py-10 border border-dashed rounded-lg">
+                           Sem riscos classificados. Adicione espaços no Módulo 2.
+                       </div>
+                   )}
+               </div>
+
+               <AnalysisBox text={generateBuildingAnalysis(state)} />
           </PageContainer>
 
           {/* --- CAPÍTULO III --- */}
@@ -372,7 +605,7 @@ const ReportGenerator: React.FC = () => {
                 <AnalysisBox text={generateEvacuationAnalysis(state)} />
           </PageContainer>
 
-          {/* --- CAPÍTULO V: PARTE 1 (Extinção e Deteção) --- */}
+          {/* --- CAPÍTULO V: PAGE 1 (Extinção e Deteção) --- */}
           <PageContainer className="page-break">
                <h3 className="text-xl font-bold text-gray-800 mb-4 uppercase tracking-wide border-b border-anepc-blue pb-1">Capítulo V - Instalações Técnicas</h3>
                <div className="text-justify text-sm text-gray-700 leading-relaxed mb-6">
@@ -388,10 +621,9 @@ const ReportGenerator: React.FC = () => {
                <h4 className="font-bold text-gray-900 mb-2 font-sans text-base border-t border-gray-200 pt-4">5.2. Deteção, Alarme e Alerta (Módulo 11)</h4>
                <p className="text-sm text-gray-600 mb-4">Componentes do Sistema Automático de Deteção de Incêndio (SADI).</p>
                <EquipmentTable spaces={state.spaces} moduleId={11} title="5.2 - Tabela de Quantidades: Deteção" />
-
           </PageContainer>
 
-          {/* --- CAPÍTULO V: PARTE 2 (Sinalização e Fumo) --- */}
+          {/* --- CAPÍTULO V: PAGE 2 (Sinalização) --- */}
           <PageContainer className="page-break">
                <h3 className="text-xl font-bold text-gray-800 mb-4 uppercase tracking-wide border-b border-anepc-blue pb-1">Capítulo V - Instalações Técnicas (Cont.)</h3>
                
@@ -399,39 +631,47 @@ const ReportGenerator: React.FC = () => {
                <h4 className="font-bold text-gray-900 mb-2 font-sans text-base">5.3. Sinalização e Iluminação (Módulo 13)</h4>
                <p className="text-sm text-gray-600 mb-4">Sinalização de emergência fotoluminescente e blocos autónomos.</p>
                <EquipmentTable spaces={state.spaces} moduleId={13} title="5.3 - Tabela de Quantidades: Sinalização" />
-
-               {/* 5.4 Controlo de Fumo */}
-               {state.smokeCalculations.length > 0 && (
-                   <>
-                       <h4 className="font-bold text-gray-900 mb-2 font-sans text-base border-t border-gray-200 pt-4">5.4. Sistemas de Controlo de Fumo (Módulo 7)</h4>
-                       <p className="text-sm text-gray-600 mb-4">Sistemas de desenfumagem natural ou mecânica.</p>
-                       <table className="w-full text-xs border-collapse border border-gray-300 font-sans mb-8">
-                           <thead className="bg-gray-100">
-                               <tr>
-                                   <th className="border p-2 text-left">Zona</th>
-                                   <th className="border p-2 text-left">Método</th>
-                                   <th className="border p-2 text-right">Caudal / Área Útil</th>
-                                   <th className="border p-2 text-left">Notas</th>
-                               </tr>
-                           </thead>
-                           <tbody>
-                               {state.smokeCalculations.map(c => (
-                                   <tr key={c.id}>
-                                       <td className="border p-2 pl-2 font-bold">{c.name}</td>
-                                       <td className="border p-2 capitalize">{c.method}</td>
-                                       <td className="border p-2 text-right font-bold text-anepc-blue">
-                                           {c.results.areaUseful ? `${c.results.areaUseful.toFixed(2)} m²` : `${c.results.flowM3S?.toFixed(2)} m³/s`}
-                                       </td>
-                                       <td className="border p-2 text-gray-500 italic">{c.notes}</td>
-                                   </tr>
-                               ))}
-                           </tbody>
-                       </table>
-                   </>
-               )}
-
-               <AnalysisBox text={generateTechnicalAnalysis(state)} />
           </PageContainer>
+
+          {/* --- CAPÍTULO V: PAGE 3 (Fumo) --- */}
+          {state.smokeCalculations.length > 0 && (
+              <PageContainer className="page-break">
+                  <h3 className="text-xl font-bold text-gray-800 mb-4 uppercase tracking-wide border-b border-anepc-blue pb-1">Capítulo V - Instalações Técnicas (Cont.)</h3>
+                   
+                   {/* 5.4 Controlo de Fumo */}
+                   <h4 className="font-bold text-gray-900 mb-2 font-sans text-base">5.4. Sistemas de Controlo de Fumo (Módulo 7)</h4>
+                   <p className="text-sm text-gray-600 mb-4">Sistemas de desenfumagem natural ou mecânica dimensionados.</p>
+                   <table className="w-full text-xs border-collapse border border-gray-300 font-sans mb-8">
+                       <thead className="bg-gray-100">
+                           <tr>
+                               <th className="border p-2 text-left w-1/4">Zona</th>
+                               <th className="border p-2 text-left w-1/2">Descrição da Solução Técnica</th>
+                               <th className="border p-2 text-left w-1/4">Notas</th>
+                           </tr>
+                       </thead>
+                       <tbody>
+                           {state.smokeCalculations.map(c => {
+                               const desc = c.method === 'passive' || c.method === 'apsad'
+                                   ? `Desenfumagem Natural: Área útil total de ${c.results.areaUseful.toFixed(2)} m².`
+                                   : `Desenfumagem Mecânica: Caudal de extração de ${c.results.flowM3H?.toFixed(0)} m³/h (${c.results.flowM3S?.toFixed(2)} m³/s).`;
+                               
+                               return (
+                                   <tr key={c.id}>
+                                       <td className="border p-2 pl-2 font-bold align-top">{c.name}</td>
+                                       <td className="border p-2 align-top">
+                                           <span className="font-bold text-gray-800 block mb-1">{desc}</span>
+                                           <span className="text-gray-500 text-[10px] uppercase">{c.method === 'apsad' ? 'Norma APSAD R17' : 'Método Geral (DL 220/2008)'}</span>
+                                       </td>
+                                       <td className="border p-2 text-gray-500 italic text-[10px] align-top">{c.notes}</td>
+                                   </tr>
+                               );
+                           })}
+                       </tbody>
+                   </table>
+
+                   <AnalysisBox text={generateTechnicalAnalysis(state)} />
+              </PageContainer>
+          )}
 
           {/* --- CAPÍTULO VI: CONSIDERAÇÕES FINAIS (AI Generated) --- */}
           <PageContainer className="page-break">

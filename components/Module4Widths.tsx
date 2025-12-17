@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useProject } from '../context/ProjectContext';
 import { WidthCalculation } from '../types';
 
@@ -18,6 +18,12 @@ const Module4Widths: React.FC = () => {
   const [calculationMode, setCalculationMode] = useState<'manual' | 'total' | 'space'>('manual');
   const [selectedSpaceId, setSelectedSpaceId] = useState('');
   const [calcName, setCalcName] = useState('');
+
+  // Filter available spaces
+  const availableSpaces = useMemo(() => {
+      const usedSpaceIds = new Set(state.widthCalculations.map(c => c.sourceSpaceId).filter(Boolean));
+      return state.spaces.filter(s => !usedSpaceIds.has(s.id));
+  }, [state.spaces, state.widthCalculations]);
 
   // Auto-fill occupancy when switching modes
   useEffect(() => {
@@ -75,6 +81,7 @@ const Module4Widths: React.FC = () => {
       const newCalc: WidthCalculation = {
           id: Date.now().toString(),
           name: calcName,
+          sourceSpaceId: (calculationMode === 'space' && selectedSpaceId) ? selectedSpaceId : undefined,
           occupancy: Number(occupancy),
           up: reqs.up,
           width: reqs.width,
@@ -87,6 +94,10 @@ const Module4Widths: React.FC = () => {
       if(calculationMode === 'manual') {
           setCalcName('');
           setOccupancy('');
+      } else if (calculationMode === 'space') {
+          setSelectedSpaceId('');
+          setOccupancy('');
+          setCalcName('');
       }
   };
 
@@ -141,8 +152,10 @@ const Module4Widths: React.FC = () => {
                             onChange={handleSpaceChange}
                             className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-anepc-blue focus:border-anepc-blue"
                          >
-                            <option value="">-- Selecione um espaço --</option>
-                            {state.spaces.map(s => (
+                            <option value="">
+                                {availableSpaces.length === 0 ? '-- Todos os espaços já calculados --' : '-- Selecione um espaço --'}
+                            </option>
+                            {availableSpaces.map(s => (
                                 <option key={s.id} value={s.id}>{s.name} ({s.occupancy} pax)</option>
                             ))}
                          </select>

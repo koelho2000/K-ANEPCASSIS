@@ -7,6 +7,7 @@ import ReportGenerator from './components/ReportGenerator';
 import SearchModal from './components/SearchModal';
 import LegislationViewer from './components/LegislationViewer';
 import SummaryDashboard from './components/SummaryDashboard';
+import HelpModal from './components/HelpModal'; // Import HelpModal
 
 // Modules
 import Module1Category from './components/Module1Category';
@@ -20,6 +21,7 @@ const AppContent: React.FC = () => {
   const { state, setMode } = useProject();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false); // State for Help Modal
 
   // Keyboard shortcut for search
   useEffect(() => {
@@ -33,6 +35,11 @@ const AppContent: React.FC = () => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         setIsSearchOpen(true);
+      }
+      // Shortcut for Help
+      if (e.key === 'F1') {
+          e.preventDefault();
+          setIsHelpOpen(true);
       }
     };
 
@@ -68,7 +75,7 @@ const AppContent: React.FC = () => {
       case 4: return <Module4Widths />;
       case 7: return <Module7Smoke />;
       case 14: return <LegislationViewer />;
-      case 15: return <SummaryDashboard />; // New Summary Dashboard
+      case 15: return <SummaryDashboard />;
       default: return <RegulationViewer />;
     }
   };
@@ -90,6 +97,7 @@ const AppContent: React.FC = () => {
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden font-sans text-slate-800">
       <SearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
+      <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
 
       {/* Header Mobile - Only visible on small screens */}
       <div className="md:hidden fixed top-0 w-full bg-white z-50 border-b border-gray-200 h-16 flex items-center px-4 justify-between shadow-sm">
@@ -125,14 +133,32 @@ const AppContent: React.FC = () => {
                 <span className="ml-auto text-xs border border-gray-300 rounded px-1.5 bg-white text-gray-400">/</span>
              </button>
 
-             <div className="text-right hidden lg:block">
-                 <p className="text-xs font-bold text-gray-700">{state.projectName || 'Projeto'}</p>
-                 <p className="text-[10px] text-gray-400">{state.projectLocation || 'Localização'}</p>
+             {/* Help Button */}
+             <button 
+                onClick={() => setIsHelpOpen(true)}
+                className="text-gray-500 hover:text-anepc-blue p-2 rounded-full hover:bg-blue-50 transition-colors"
+                title="Ajuda / Manual (F1)"
+             >
+                 <i className="fas fa-question-circle text-lg"></i>
+             </button>
+
+             <div className="text-right hidden lg:flex items-center gap-3 border-l border-gray-200 pl-4 ml-2">
+                 <div>
+                    <p className="text-xs font-bold text-gray-700">{state.projectName || 'Projeto'}</p>
+                    <p className="text-[10px] text-gray-400">{state.projectLocation || 'Localização'}</p>
+                 </div>
+                 <button 
+                    onClick={() => setMode('project_details')} 
+                    className="text-gray-400 hover:text-anepc-blue hover:bg-blue-50 p-1.5 rounded transition-colors"
+                    title="Editar dados do projeto e técnico"
+                 >
+                    <i className="fas fa-edit"></i>
+                 </button>
              </div>
              
              <button 
                  onClick={() => setMode('report')}
-                 className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2 px-4 rounded shadow-sm transition-colors flex items-center gap-2"
+                 className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-2 px-4 rounded shadow-sm transition-colors flex items-center gap-2 ml-2"
              >
                  <i className="fas fa-file-alt"></i>
                  GERAR RELATÓRIO

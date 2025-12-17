@@ -8,10 +8,12 @@ interface ProjectContextType {
   addSpace: (space: Space) => void;
   removeSpace: (id: string) => void;
   addEvacuationPath: (path: EvacuationPath) => void;
+  updateEvacuationPath: (path: EvacuationPath) => void;
   removeEvacuationPath: (id: string) => void;
   addWidthCalculation: (calc: WidthCalculation) => void;
   removeWidthCalculation: (id: string) => void;
   addSmokeCalculation: (calc: SmokeCalculation) => void;
+  updateSmokeCalculation: (calc: SmokeCalculation) => void;
   removeSmokeCalculation: (id: string) => void;
   setCurrentModule: (id: number) => void;
   setProjectDetails: (name: string, location: string, technician: TechnicianData) => void;
@@ -111,6 +113,13 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   };
 
+  const updateEvacuationPath = (path: EvacuationPath) => {
+    setState(prev => ({
+      ...prev,
+      evacuationPaths: prev.evacuationPaths.map(p => p.id === path.id ? path : p)
+    }));
+  };
+
   const removeEvacuationPath = (id: string) => {
     setState(prev => ({
       ...prev,
@@ -151,6 +160,13 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
             completedModules: Array.from(completed)
         }
     });
+  };
+
+  const updateSmokeCalculation = (calc: SmokeCalculation) => {
+    setState(prev => ({
+      ...prev,
+      smokeCalculations: prev.smokeCalculations.map(c => c.id === calc.id ? calc : c)
+    }));
   };
 
   const removeSmokeCalculation = (id: string) => {
@@ -205,10 +221,12 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         addSpace, 
         removeSpace, 
         addEvacuationPath, 
+        updateEvacuationPath,
         removeEvacuationPath, 
         addWidthCalculation, 
         removeWidthCalculation,
         addSmokeCalculation,
+        updateSmokeCalculation,
         removeSmokeCalculation,
         setCurrentModule, 
         setProjectDetails, 

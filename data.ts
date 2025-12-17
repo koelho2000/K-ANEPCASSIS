@@ -79,6 +79,36 @@ export const calculateRiskCategory = (data: BuildingData): RiskCategory => {
   }
 };
 
+/**
+ * Returns the maximum allowed area for a single fire compartment based on Category and UT.
+ * Simplification based on typical limits in RT-SCIE (Portaria 1532/2008 Art 17-23).
+ */
+export const getMaxCompartmentSize = (category: RiskCategory | null, ut: UtilizationType): number => {
+    // Default fallback limits
+    if (!category) return 2500;
+
+    // Special cases for Large Occupancies like Industry (XII) or Parking (II)
+    if (ut === UtilizationType.XII) {
+        if (category === 1 || category === 2) return 4000; // Allows larger sectors
+        if (category === 3) return 3000;
+        return 2000;
+    }
+    if (ut === UtilizationType.II) {
+        // Parking sectors often defined by smoke control limits (e.g., 3200m2)
+        // But structural compartmentation is stricter. Let's use 3200 as a common breakpoint.
+        return 3200; 
+    }
+
+    // Standard cases (III, IV, V, VI, etc)
+    switch (category) {
+        case 1: return 2500;
+        case 2: return 2500;
+        case 3: return 2000;
+        case 4: return 1600;
+        default: return 2500;
+    }
+};
+
 // Generates specific technical requirements based on Module ID and Project State
 export const getTechnicalRequirements = (moduleId: number, state: ProjectState): TechnicalRequirement[] => {
     const { category, building } = state;
