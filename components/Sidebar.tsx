@@ -56,7 +56,7 @@ const Sidebar: React.FC = () => {
   };
 
   return (
-    <div className="w-64 bg-white border-r border-gray-200 h-full flex flex-col fixed left-0 top-16 bottom-0 overflow-y-auto print-only:hidden">
+    <div className="w-64 bg-white border-r border-gray-200 flex flex-col fixed left-0 top-16 bottom-0 overflow-y-auto print-only:hidden pb-16 z-40 shadow-xl md:shadow-none">
       <div className="p-6 border-b border-gray-100">
         <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Progresso</h4>
         <div className="w-full bg-gray-100 rounded-full h-2 mb-2">
